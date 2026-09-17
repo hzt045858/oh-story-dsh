@@ -1007,7 +1007,12 @@ function CreativeWorkbench({
   useEffect(() => {
     if (modeSelection.current === selected) return;
     modeSelection.current = selected;
-    setEditorMode(selected !== undefined && (activityPaths.has(selected) || isDirtyDraft(buffersRef.current[selected])) ? "source" : selectedMedia || previewable ? "preview" : "source");
+    // Only an Agent-written file forces the source view. A local draft must not: the preview
+    // renders `buffer.content`, so the unsaved text is already what the reader sees, and the
+    // draft-restore path (restoreWorkbenchDrafts) is the one place that legitimately opens in
+    // source. Forcing source for every dirty draft also breaks the contract that selecting a
+    // file shows its rendered preview, which `pnpm test:dsh` asserts after a workbench round trip.
+    setEditorMode(selected !== undefined && activityPaths.has(selected) ? "source" : selectedMedia || previewable ? "preview" : "source");
   }, [activityPaths, previewable, selected, selectedMedia]);
 
   useEffect(() => {
