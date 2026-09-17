@@ -158,7 +158,16 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       // Both drama stages that the workbench dispatches stream slowly, so their task cards
       // stay in flight long enough to assert the running-turn controls. Assembly moved to
       // /short-drama-edit in Drama 0.7; leaving it out made that turn settle instantly.
-      const productionTurn = currentTurn.includes("/short-drama-produce") || currentTurn.includes("/short-drama-edit");
+      //
+      // DSH expands a slash command into a `<skill_content name="…">` user message before the turn
+      // reaches the model, so the last user message carries the expanded skill text rather than the
+      // literal command. Matching only the raw command made the production turn fall through to the
+      // fast generic reply below: the turn settled immediately, the task board never showed the
+      // running-turn controls, and the smoke failed where it expects a dispatched production task to
+      // still be in flight. Match the expanded form as well.
+      const turnText = currentTurn.replace(/\\"/gu, '"');
+      const productionTurn = turnText.includes("/short-drama-produce") || turnText.includes("/short-drama-edit")
+        || turnText.includes('<skill_content name="short-drama-produce">') || turnText.includes('<skill_content name="short-drama-edit">');
       const roleParentTurn = currentTurn.includes(roleSmokePrompt);
       const productionIntentTurn = currentTurn.includes(productionIntentSmokePrompt);
       const roleChildTurn = serialized.includes(roleChildPrompt) && !serialized.includes(roleSmokePrompt);
@@ -2163,10 +2172,26 @@ async function main(): Promise<void> {
         composerLocator.getByRole("button", { name: /^(?:Select model|选择模型)/u }).boundingBox(),
         composerLocator.getByRole("button", { name: /^(?:Send message|发送消息)$/u }).boundingBox()
       ]);
-      if (compactBoxes.some((box) => box === null)) throw new Error("Compact three-column layout lost a required column.");
-      const [compactTree, compactEditor, compactChat, compactComposer, compactModel, compactSend] = compactBoxes as Exclude<(typeof compactBoxes)[number], null>[];
+      // Destructure before narrowing: `Promise.all` hands back a six-element tuple, and casting it
+      // to an array type would make every element `| undefined` under `noUncheckedIndexedAccess`.
+      const [compactTree, compactEditor, compactChat, compactComposer, compactModel, compactSend] = compactBoxes;
+      if (compactTree === null || compactEditor === null || compactChat === null
+        || compactComposer === null || compactModel === null || compactSend === null) {
+        throw new Error("Compact layout lost a required pane.");
+      }
+      // The compact workbench is deliberately two rows: tree and editor share the top row, and the
+      // chat pane owns the full width below them (see the compact rules in plugin.css). The previous
+      // assertion described the upstream three-column arrangement — tree | editor | chat left to
+      // right — which cannot hold here: three columns need at least 95 + 339 + 240 = 674 px while the
+      // conversation pane only offers ~434 px, so the old check asked for a layout that was already
+      // too wide for the viewport it was measured in. What still has to hold is that the two top
+      // panes sit side by side, the chat pane spans the full width of that row, the chat row starts
+      // below the top row, and nothing is clipped horizontally.
       const compactOrdered = compactTree.x + compactTree.width <= compactEditor.x + 1
-        && compactEditor.x + compactEditor.width <= compactChat.x + 1;
+        && compactChat.x <= compactTree.x + 1
+        && compactChat.x + compactChat.width >= compactEditor.x + compactEditor.width - 2;
+      const compactRows = compactTree.y + compactTree.height <= compactChat.y + 1;
+      const compactScrollerOverflow = compactScroller.scrollWidth > compactScroller.clientWidth + 1;
       const compactVisible = [compactTree, compactEditor, compactChat, compactComposer, compactModel, compactSend]
         .every((box) => box.x >= -1 && box.x + box.width <= 501);
       const compactFileTextWidth = await page.locator(`button[data-file-path=${JSON.stringify(compactPath)}]`).evaluate((element) => {
@@ -2176,10 +2201,10 @@ async function main(): Promise<void> {
       const compactHeaderWidth = await page.locator(".oh-story-editor-path > strong").evaluate((element) => element.getBoundingClientRect().width);
       const compactShotHeadingWidth = await page.getByRole("heading", { name: /^SHOT-EP001-/u }).first().evaluate((element) => element.getBoundingClientRect().width);
       const pageOverflow = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - document.documentElement.clientWidth);
-      if (!compactOrdered || !compactVisible
+      if (!compactOrdered || !compactRows || !compactVisible || compactScrollerOverflow
         || await scrollerLocator.getAttribute("data-oh-story-layout") !== "compact"
         || compactFileTextWidth < 32 || compactHeaderWidth < 40 || compactShotHeadingWidth < 32 || pageOverflow > 1) {
-        throw new Error(`500px viewport clipped the workbench or made its content unreadable: ${JSON.stringify({ compactScroller, compactBoxes, compactFileTextWidth, compactHeaderWidth, compactShotHeadingWidth, pageOverflow })}`);
+        throw new Error(`500px viewport clipped the workbench or made its content unreadable: ${JSON.stringify({ compactScroller, compactBoxes, compactOrdered, compactRows, compactScrollerOverflow, compactFileTextWidth, compactHeaderWidth, compactShotHeadingWidth, pageOverflow })}`);
       }
       await assertChatAnchorContract(page, chatLocator, scrollerLocator, composerLocator, "compact");
       await page.getByRole("tab", { name: "生产", exact: true }).click();

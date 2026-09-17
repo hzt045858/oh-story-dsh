@@ -18,7 +18,11 @@ export default tseslint.config(
       // checks, so it is never ours to restyle.
       "packages/knowledge/**",
       "test-results/**",
-      "release/**"
+      "release/**",
+      // Local tool state (git-ignored, never shipped). Scratch scripts and command logs land
+      // here, and a stray `.ts` file used to fail `pnpm lint` with a parser error instead of
+      // being ignored, which made the gate red for reasons that had nothing to do with the code.
+      ".workbuddy-ai/**"
     ]
   },
   {
