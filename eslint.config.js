@@ -10,11 +10,21 @@ export default tseslint.config(
       "**/lib/**",
       "**/coverage/**",
       "**/node_modules/**",
+      "apps/desktop/runtime/**",
+      "apps/desktop/src-tauri/target/**",
+      "apps/desktop/src-tauri/gen/**",
       "docs/blueprint/**",
       "packages/knowledge/oh-story/**",
       "packages/knowledge/novel-to-game/**",
+      "test-results/**",
       "release/**"
     ]
+  },
+  {
+    files: ["apps/desktop/ui/*.js"],
+    languageOptions: {
+      globals: { document: "readonly", window: "readonly", setInterval: "readonly" }
+    }
   },
   {
     files: ["**/*.ts", "**/*.tsx"],

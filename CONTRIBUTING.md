@@ -9,6 +9,7 @@
 
 ```bash
 pnpm install --frozen-lockfile
+python -m pip install -r packages/knowledge/wechat/skills/wechat-article/scripts/requirements.txt
 ```
 
 ## 本地验证

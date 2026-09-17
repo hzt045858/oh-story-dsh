@@ -628,6 +628,20 @@ async function main(): Promise<void> {
       "package/lib/index.js", "package/lib/client.js", "package/lib/oh-story/manifest.json", "package/lib/drama/manifest.json",
       "package/lib/novel-to-game/manifest.json",
       "package/lib/video-recap/manifest.json",
+      "package/lib/wechat/skills/wechat-article/SKILL.md",
+      "package/lib/wechat/skills/wechat-article/references/build-library.md",
+      "package/lib/wechat/skills/wechat-article/scripts/article_library.py",
+      "package/lib/wechat/skills/wechat-article/scripts/article_images.py",
+      "package/lib/wechat/skills/wechat-article/scripts/wechat_publish.py",
+      "package/lib/wechat/skills/wechat-article/scripts/publication_plan.py",
+      "package/lib/wechat/skills/wechat-article/scripts/wechat_api.py",
+      "package/lib/wechat/skills/wechat-article/references/publishing.md",
+      "package/lib/wechat/third_party/wewrite/LICENSE",
+      "package/lib/wechat/third_party/wewrite/themes/professional-clean.yaml",
+      "package/lib/wechat/third_party/baoyu/LICENSE",
+      "package/lib/wechat/third_party/aiworkskills/LICENSE",
+      "package/lib/wechat/upstreams.json",
+      "package/lib/wechat/THIRD_PARTY_NOTICES.md",
       "package/lib/oh-story/skills/story-setup/references/agent-references/writing-craft.md",
       "package/lib/drama/skills/short-drama/references/creator-documents.md",
       "package/lib/drama/skills/short-drama-storyboard/references/comic-keyframe-lexicon.md",
@@ -684,19 +698,22 @@ async function main(): Promise<void> {
     // the page loads. Wait for it instead of skipping a not-yet-mounted dialog.
     await firstRunPage.getByRole("button", { name: /^(?:Continue|继续)$/u }).click({ timeout: 20_000 });
     await firstRunPage.getByRole("dialog").waitFor({ state: "detached", timeout: 10_000 });
-    const welcome = firstRunPage.getByRole("region", { name: "Oh Story 使用引导" });
+    const welcome = firstRunPage.getByRole("region", { name: "Oh Story 创作工作台" });
     await welcome.waitFor({ state: "visible", timeout: 20_000 });
-    if (!(await welcome.innerText()).includes("Oh Story 已加载")) throw new Error("First launch did not explain how to open the workbench.");
+    for (const mode of ["小说", "短剧", "游戏", "视频", "公众号"]) {
+      await welcome.getByRole("navigation", { name: "创作工作台", exact: true }).getByRole("button", { name: mode, exact: true })
+        .waitFor({ state: "visible", timeout: 10_000 });
+    }
     // Check compact layout on a separate page so resizing does not switch the
     // desktop page's sidebar into a drawer while fixture Sessions arrive.
     const compactFirstRunPage = await firstRunPage.context().newPage();
     await compactFirstRunPage.setViewportSize({ width: 500, height: 900 });
     await compactFirstRunPage.goto(dshTokenUrl, { waitUntil: "networkidle" });
-    const compactWelcome = compactFirstRunPage.getByRole("region", { name: "Oh Story 使用引导" });
+    const compactWelcome = compactFirstRunPage.getByRole("region", { name: "Oh Story 创作工作台" });
     await compactWelcome.waitFor({ state: "visible", timeout: 20_000 });
     const bounds = await compactWelcome.boundingBox();
     if (bounds === null || bounds.width <= 0 || bounds.x < 0 || bounds.x + bounds.width > 500) {
-      throw new Error("First-launch guide overflowed the compact viewport.");
+      throw new Error("First-launch workbench entries overflowed the compact viewport.");
     }
     await compactFirstRunPage.close();
 
@@ -714,6 +731,7 @@ async function main(): Promise<void> {
     const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: dramaWorkspace.workspace.workspaceId } });
     const plainSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: plainWorkspace.workspace.workspaceId } });
     const catalog = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: storySession.sessionId } });
+    if (!catalog.skills.some((skill) => skill.name === "wechat-article")) throw new Error("wechat-article was not registered in the packaged DSH Session.");
     const ohStorySkills = catalog.skills.filter((skill) => skill.name === "story" || skill.name.startsWith("story-") || skill.name === "browser-cdp");
     const dramaSkills = catalog.skills.filter((skill) => skill.name === "short-drama" || skill.name.startsWith("short-drama-"));
     const gameSkills = catalog.skills.filter((skill) => [
@@ -1061,13 +1079,13 @@ async function main(): Promise<void> {
       if (await page.locator(".oh-story-split-surface").count() !== 1) {
         throw new Error("Blank DSH Session did not mount the three-column workbench.");
       }
-      if (await page.getByRole("region", { name: "Oh Story 使用引导" }).count() !== 0) {
-        throw new Error("First-launch guide remained after entering a Session.");
+      if (await page.getByRole("region", { name: "Oh Story 创作工作台" }).count() !== 0) {
+        throw new Error("First-launch workbench entries remained after entering a Session.");
       }
 
       // DSH is used for far more than creation, so an installed plugin may not
       // claim every conversation: a workspace with no creative project keeps the
-      // official layout, the workbench arrives with the first creative file, and
+      // official layout with five mode entries, the workbench opens with the first creative file, and
       // the creator can hand the layout back at any time (#29).
       const layoutScroller = page.locator("[data-conversation-scroll]");
       const layoutChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)').first();
@@ -1078,9 +1096,14 @@ async function main(): Promise<void> {
       };
       await selectSession(page, plainWorkspace.workspace.title, plainSessionTitle);
       await page.getByText(plainPrompt, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      const workbenchLauncher = page.getByRole("navigation", { name: "打开创作工作台", exact: true });
+      await workbenchLauncher.waitFor({ state: "visible", timeout: 10_000 });
+      for (const mode of ["小说", "短剧", "游戏", "视频", "公众号"]) {
+        await workbenchLauncher.getByRole("button", { name: mode, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      }
       const plainChatWidth = await chatWidth();
-      if (await page.locator(".oh-story-split-surface").count() !== 0
-        || await page.getByRole("button", { name: "打开创作工作台" }).count() !== 0
+      if (await page.locator('.oh-story-split-surface[data-open="false"]').count() !== 1
+        || await page.locator('.oh-story-split-surface[data-open="true"]').count() !== 0
         || await layoutScroller.getAttribute("data-oh-story-layout") !== null) {
         throw new Error("A workspace without creative projects still lost its official conversation layout.");
       }
@@ -1110,7 +1133,6 @@ async function main(): Promise<void> {
 
       const collapseWorkbench = page.getByRole("button", { name: "收起创作工作台" }).first();
       await collapseWorkbench.click();
-      const workbenchLauncher = page.getByRole("button", { name: "打开创作工作台" });
       await workbenchLauncher.waitFor({ state: "visible", timeout: 10_000 });
       await page.locator(".oh-story-tree").waitFor({ state: "detached", timeout: 10_000 });
       const collapsedChatWidth = await chatWidth();
@@ -1137,7 +1159,7 @@ async function main(): Promise<void> {
         || await layoutScroller.getAttribute("data-oh-story-layout") !== null) {
         throw new Error("A collapsed workbench reopened itself in a new Session of the same workspace.");
       }
-      await workbenchLauncher.click();
+      await workbenchLauncher.getByRole("button", { name: "小说", exact: true }).click();
       await page.getByRole("navigation", { name: "小说项目文件" }).waitFor({ state: "visible", timeout: 10_000 });
       if (await layoutScroller.getAttribute("data-oh-story-layout") !== "wide") {
         throw new Error("The launcher did not hand the layout back to the workbench.");
@@ -1151,16 +1173,17 @@ async function main(): Promise<void> {
         const body = (await page.locator("body").innerText()).slice(0, 4_000);
         throw new Error(`Three-column story surface was not visible; tabs=${JSON.stringify(tabs)}; pageErrors=${JSON.stringify(pageErrors)}; body=${JSON.stringify(body)}`, { cause: error });
       }
-      const storyKind = page.locator(".oh-story-kind");
-      await storyKind.waitFor({ state: "visible", timeout: 10_000 });
+      const storySurface = page.locator('.oh-story-split-surface[data-workbench="story"]');
+      await storySurface.waitFor({ state: "attached", timeout: 10_000 });
       const storyWorkbenchTabs = page.getByRole("tablist", { name: "创作工作台" });
       await storyWorkbenchTabs.waitFor({ state: "visible", timeout: 10_000 });
-      if (await storyKind.textContent() !== "小说"
+      if (await storyWorkbenchTabs.getByRole("tab", { name: "小说", exact: true, selected: true }).count() !== 1
         || await storyWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).count() !== 1
         || await storyWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true }).count() !== 1
         || await storyWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).count() !== 1
-        || await storyWorkbenchTabs.getByRole("tab", { name: "视频", exact: true }).count() !== 1) {
-        throw new Error("Story workspace did not expose all four persistent creation workbenches.");
+        || await storyWorkbenchTabs.getByRole("tab", { name: "视频", exact: true }).count() !== 1
+        || await storyWorkbenchTabs.getByRole("tab", { name: "公众号", exact: true }).count() !== 1) {
+        throw new Error("Story workspace did not expose all five persistent creation workbenches.");
       }
       if (await page.getByRole("button", { name: "刷新项目文件", exact: true }).count() !== 1) {
         throw new Error("The workspace refresh control has no descriptive accessible name.");
@@ -1305,9 +1328,12 @@ async function main(): Promise<void> {
         await page.getByRole("button", { name: "刷新项目文件", exact: true }).click();
         await dramaTab.waitFor({ state: "visible", timeout: 10_000 });
         await dramaTab.click();
-        await page.getByText("当前 workspace 还没有短剧项目。", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+        const dramaStart = page.getByRole("region", { name: "短剧创作起点", exact: true });
+        await dramaStart.waitFor({ state: "visible", timeout: 10_000 });
+        await dramaStart.getByRole("button", { name: /^(?:开始创作|继续编辑)$/u }).waitFor({ state: "visible", timeout: 10_000 });
         await storyTab.click();
-        await page.locator(".oh-story-kind").filter({ hasText: "小说" }).waitFor({ state: "visible", timeout: 10_000 });
+        await storySurface.waitFor({ state: "attached", timeout: 10_000 });
+        await workbenchTabs.getByRole("tab", { name: "小说", exact: true, selected: true }).waitFor({ state: "visible", timeout: 10_000 });
       }
       await prepareDemoSurface(page);
       const previewTab = page.getByRole("tab", { name: "预览" });
@@ -1656,16 +1682,17 @@ async function main(): Promise<void> {
       await selectSession(page, dramaWorkspace.workspace.title, dramaSessionTitle);
       const dramaTree = page.getByRole("navigation", { name: "短剧项目文件" });
       await dramaTree.waitFor({ state: "visible", timeout: 10_000 });
-      const dramaKind = page.locator(".oh-story-kind");
-      await dramaKind.waitFor({ state: "visible", timeout: 10_000 });
+      const dramaSurface = page.locator('.oh-story-split-surface[data-workbench="drama"]');
+      await dramaSurface.waitFor({ state: "attached", timeout: 10_000 });
       const dramaWorkbenchTabs = page.getByRole("tablist", { name: "创作工作台" });
       await dramaWorkbenchTabs.waitFor({ state: "visible", timeout: 10_000 });
-      if (await dramaKind.textContent() !== "短剧"
+      if (await dramaWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true, selected: true }).count() !== 1
         || await dramaWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true }).count() !== 1
         || await dramaWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).count() !== 1
         || await dramaWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).count() !== 1
-        || await dramaWorkbenchTabs.getByRole("tab", { name: "视频", exact: true }).count() !== 1) {
-        throw new Error("Drama workspace did not expose all four persistent creation workbenches.");
+        || await dramaWorkbenchTabs.getByRole("tab", { name: "视频", exact: true }).count() !== 1
+        || await dramaWorkbenchTabs.getByRole("tab", { name: "公众号", exact: true }).count() !== 1) {
+        throw new Error("Drama workspace did not expose all five persistent creation workbenches.");
       }
       await selectFile(page, "剧集/EP001/剧本.md");
       await page.getByRole("tab", { name: "预览", exact: true }).click();

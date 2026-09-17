@@ -314,3 +314,32 @@ export function dshVideoRecapSkillContent(_name: string, content: string): strin
 export function createVideoRecapSkillProvider(skillRoot = defaultVideoRecapSkillRoot()): SkillProvider {
   return createBundledSkillProvider(VIDEO_PROVIDER_NAME, skillRoot, dshVideoRecapSkillContent);
 }
+
+export function defaultWechatSkillRoot(): string {
+  const current = dirname(fileURLToPath(import.meta.url));
+  return basename(current) === "src"
+    ? resolve(current, "../../knowledge/wechat/skills")
+    : resolve(current, "wechat/skills");
+}
+
+export function createWechatSkillProvider(skillRoot = defaultWechatSkillRoot()): SkillProvider {
+  const imageAdapter = resolve(defaultDramaSkillRoot(), "short-drama-produce/scripts/provider_adapters.py");
+  return createBundledSkillProvider("wechat-article", skillRoot, (_name, content) => [
+    "<wechat-article-dsh-integration>",
+    "DSH owns the workspace, Agent, model, tools, permissions, approvals, cancellation, and Session history.",
+    "Use the current DSH Chat, existing 公众号 workbench and visible tools. Never start a separate Agent runtime.",
+    "Read references/workflow-control.md before WeChat production. The shared contract covers all accounts, topics and text/mixed/image-led forms; never hard-code the test author's colors, characters, dimensions or card count as module defaults.",
+    "Use style_release.py audit/seal for evidence-backed model readiness. Daily writing reads only the saved release/models, not source articles. A legacy ready flag or a successful OCR run is not a verified release.",
+    "Use article_workflow.py inputs/lock/compile/assemble/check for new and explicitly migrated tasks. Keep the verbatim user request and routed topic, produce actual reviews, and compile each image request from the locked plan; do not improvise a different prompt for a chat image tool. A manual image import is declared provenance, not proof that a provider executed the saved request.",
+    "Changed tasks need a reviewed next revision. Reuse unchanged card signatures and receipts; do not regenerate an entire batch for a one-card change. Program checks validate structure/freshness, not semantic truth: actually review complete image-text relationships, exact visible copy and sequence before accepting.",
+    "HTML preview is not final acceptance. Controlled publications must pass composed-body, cover, image, final-review and layout gates before any remote action; no reviewed=true shortcut. Missing provider capabilities remain blocked rather than triggering a different model or text-only fallback.",
+    "For initial or incremental WeChat library building, use article_library.py ingest to preserve originals and prepare ordered image-body views. OCR is optional: when direct vision is available, use --visual-only to prepare actual images and every bounded animation frame without OCR. Downloads require --allow-remote-images and are limited to referenced WeChat CDN images. Missing images and unfinished joint/frame review remain pending; extraction alone is not completed author analysis.",
+    "The bundled wechat_publish.py supports account-isolated draft uploads/updates, recipient previews, public publication, mass sending, due-time checks and status reconciliation. Read references/publishing.md for the plan format; use only the accounts and external actions authorized by the current user request.",
+    "Resolve python3/python in the current execution environment; host-only paths may be unavailable in a sandbox or remote filesystem.",
+    `The bundled image provider adapter is ${imageAdapter}. Pass it to scripts/article_images.py with --adapter-script only when that file is accessible in the current execution environment.`,
+    "Reuse only the image provider adapter, not the short-drama production workflow or its episode directories. Image credentials stay in the execution environment; never print or store them in article files.",
+    "If the adapter is unavailable, use a visible image tool or deliver saved image prompts with an explicit pending status. Do not claim an image was generated without a readable file.",
+    "</wechat-article-dsh-integration>",
+    content
+  ].join("\n\n"));
+}

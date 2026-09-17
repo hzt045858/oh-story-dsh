@@ -9,6 +9,7 @@ const ohStoryRoot = resolve(root, "packages/knowledge/oh-story");
 const dramaRoot = resolve(root, "packages/knowledge/drama");
 const novelToGameRoot = resolve(root, "packages/knowledge/novel-to-game");
 const videoRecapRoot = resolve(root, "packages/knowledge/video-recap");
+const wechatRoot = resolve(root, "packages/knowledge/wechat");
 const platformGlue = [
   "skills/story/assets/",
   "skills/story/scripts/dashboard-server.mjs",
@@ -76,6 +77,7 @@ await build({
   treeShaking: true,
   define: { "process.env.NODE_ENV": '"production"' },
   minifySyntax: true,
+  minifyWhitespace: true,
   external: ["@deepseek-ai/*", "react", "react/jsx-runtime", "react-dom", "react-dom/client"],
   plugins: [inlineCss],
   banner: { js: "window.__ModuleLoader__.load({id:\"@oh-story/dsh\",factory:(require)=>{var module={exports:{}};var exports=module.exports;" },
@@ -123,6 +125,11 @@ await cp(videoRecapRoot, resolve(outputRoot, "video-recap"), {
       && !source.endsWith(".pyc")
       && !source.endsWith("/.DS_Store");
   }
+});
+
+await cp(wechatRoot, resolve(outputRoot, "wechat"), {
+  recursive: true,
+  filter: (source) => !/(?:^|[\\/])__pycache__(?:[\\/]|$)|\.pyc$|(?:^|[\\/])\.DS_Store$/u.test(source)
 });
 
 for (const excluded of [

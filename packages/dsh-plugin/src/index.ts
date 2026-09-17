@@ -4,7 +4,7 @@ import type {} from "@deepseek-ai/dsh-skill";
 import type {} from "@deepseek-ai/dsh-subagent";
 import type {} from "@deepseek-ai/dsh-tools";
 import z from "@deepseek-ai/schemastery";
-import { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStorySkillProvider, createVideoRecapSkillProvider, defaultDramaSkillRoot } from "./skill-provider.js";
+import { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStorySkillProvider, createVideoRecapSkillProvider, createWechatSkillProvider, defaultDramaSkillRoot } from "./skill-provider.js";
 import { ensureDramaAdapterConfig } from "./drama-adapters.js";
 import { hostPython } from "./host-python.js";
 import { registerOhStoryHooks } from "./native-hooks.js";
@@ -13,7 +13,7 @@ import { registerOhStoryProductionTool } from "./production-tool.js";
 import { registerWorkspaceRoute } from "./workspace-route.js";
 import { assertTrustedWorkspaceAuthority } from "./workspace-request-trust.js";
 
-export { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStorySkillProvider, createVideoRecapSkillProvider, parseBundledSkill } from "./skill-provider.js";
+export { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStorySkillProvider, createVideoRecapSkillProvider, createWechatSkillProvider, parseBundledSkill } from "./skill-provider.js";
 export { OH_STORY_ROLE_NAMES, loadBundledRole } from "./role-provider.js";
 export { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, registerOhStoryRoleTool, roleToolFilter, type OhStoryRoleSubagents } from "./role-tool.js";
 export { createOhStoryProductionTool, registerOhStoryProductionTool } from "./production-tool.js";
@@ -45,6 +45,7 @@ export async function apply(context: Context, config: Config = {}): Promise<void
   context.skills.registerProvider(() => createDramaSkillProvider());
   context.skills.registerProvider(() => createNovelToGameSkillProvider());
   context.skills.registerProvider(() => createVideoRecapSkillProvider());
+  context.skills.registerProvider(() => createWechatSkillProvider());
   registerOhStoryHooks(context);
   registerOhStoryProductionTool(context);
   await registerOhStoryRoleTool(context);

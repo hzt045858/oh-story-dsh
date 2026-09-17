@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
+import type {} from "@deepseek-ai/dsh-api-session-controller";
 import { FsError, type FileSystem, type FsInfo, type FsTarget, type FsVersion } from "@deepseek-ai/dsh-fs";
 import type {} from "@deepseek-ai/dsh-host-webserver";
 import type { SandboxPolicyService } from "@deepseek-ai/dsh-sandbox-policy";
@@ -16,16 +17,18 @@ import { commandOutput, hostPython } from "./host-python.js";
 import { defaultDramaSkillRoot, defaultNovelToGameSkillRoot } from "./skill-provider.js";
 import { skipVideoDirectory, summarizeVideoProject, VIDEO_DIRECTORY, videoProjectRoot, visibleVideoPath, type VideoProjectSummary } from "./video-project.js";
 import { isTrustedPreviewNavigation, isTrustedWorkspaceRequest } from "./workspace-request-trust.js";
+import { isWechatReferencePath } from "./wechat-files.js";
 
 const STORY_DIRECTORIES = ["正文", "大纲", "设定", "追踪", "对标", "参考资料"] as const;
 const DRAMA_DIRECTORIES = ["输入", "项目开发", "设定集", "剧集", "交付", "创作者决策", "审查"] as const;
 const GAME_DIRECTORY = "game-adaptations";
 // Preview studios need only a small manifest-driven subset, so discover them before a very large
 // prose workspace can consume the shared listing budget.
-const CREATIVE_DIRECTORIES = [VIDEO_DIRECTORY, GAME_DIRECTORY, ...STORY_DIRECTORIES, ...DRAMA_DIRECTORIES] as const;
+const CREATIVE_DIRECTORIES = [VIDEO_DIRECTORY, GAME_DIRECTORY, "公众号", ...STORY_DIRECTORIES, ...DRAMA_DIRECTORIES] as const;
 const ROOT_FILES = new Set(["short-drama.json"]);
 const EDITABLE_EXTENSIONS = new Set([".md", ".txt", ".json", ".jsonl"]);
 const GAME_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".html", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
+const WECHAT_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".html"]);
 const VIDEO_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".srt", ".ass"]);
 const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
   [".png", "image/png"], [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".webp", "image/webp"], [".gif", "image/gif"],
@@ -286,6 +289,7 @@ function safeRelativePath(path: string): boolean {
 function editablePath(path: string): boolean {
   const extensions = path.startsWith(`${GAME_DIRECTORY}/`) ? GAME_EDITABLE_EXTENSIONS
     : path.startsWith(`${VIDEO_DIRECTORY}/`) ? VIDEO_EDITABLE_EXTENSIONS
+      : path.startsWith("公众号/") ? WECHAT_EDITABLE_EXTENSIONS
       : EDITABLE_EXTENSIONS;
   return extensions.has(extname(path).toLocaleLowerCase());
 }
@@ -734,6 +738,17 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
       sendPreview(request, response, preview.path, preview.bytes);
       return;
     }
+    if (url.pathname === "/oh-story/draft-session" && request.method === "POST") {
+      const realm = await workspaceRealm(context, url);
+      const persistence = context.get("sessionPersistence");
+      if (persistence === undefined || typeof persistence.ensureMaterialized !== "function") {
+        throw new WorkspaceHttpError(503, "DSH 会话持久化当前不可用。");
+      }
+      // A browser draft must keep its empty Session resumable without creating a chat event.
+      await persistence.ensureMaterialized(realm.agent.session);
+      send(response, 200, { sessionId: realm.agent.session.id });
+      return;
+    }
     if (url.pathname === "/oh-story/workspace" && request.method === "GET") {
       const realm = await workspaceRealm(context, url);
       const files = await listFiles(realm);
@@ -781,6 +796,7 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
       const realm = await workspaceRealm(context, url);
       const path = url.searchParams.get("path");
       if (path === null) throw new WorkspaceHttpError(400, "缺少文件路径。");
+      if (isWechatReferencePath(path)) throw new WorkspaceHttpError(403, "公众号参考原文为只读文件。");
       const input = await jsonBody(request, options.maxBytes * 6 + 1_024);
       if (typeof input.content !== "string") throw new WorkspaceHttpError(400, "content 必须是字符串。");
       if (typeof input.baseVersion !== "string" || input.baseVersion === "") throw new WorkspaceHttpError(400, "baseVersion 必须是有效版本。");

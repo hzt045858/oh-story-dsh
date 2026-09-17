@@ -1,6 +1,18 @@
 # Architecture
 
-oh-story-dsh is a Cordis plugin loaded into DeepSeek Harness. The repository ships one product package, `@oh-story/dsh`, with Host and Browser entries.
+oh-story-dsh is a Cordis plugin loaded into DeepSeek Harness. The repository ships the `@oh-story/dsh` package with Host and Browser entries, plus an optional Windows desktop distribution of that same application.
+
+## Desktop distribution
+
+`apps/desktop` hosts the existing DSH Web application in a Tauri 2 window. Its
+bundled Node.js 24 launcher uses the official DSH CLI with an isolated `DSH_HOME`,
+the pinned runtime and the locally built plugin. It introduces no second Agent,
+conversation UI or creative-project database. The Windows shell owns the runtime
+process tree through a Job Object, including cleanup after a desktop crash.
+Desktop commands are restricted to the bundled startup/recovery page; neither
+the DSH HTTP origin nor game previews receive native capability grants. A stable
+loopback port and persistent WebView data preserve the existing draft-backup
+origin across restarts. See [desktop operation and builds](DESKTOP.md).
 
 ## Ownership
 
@@ -47,7 +59,7 @@ The Browser entry uses two official extension slots:
 | `shell.overlay` | Declares the Session-scoped three-column creative workbench seat |
 | `tool.call.toolview` | Compact `oh_story_role` invocation view |
 
-The workbench is not unconditional. DSH is a general Harness, so the bridge claims the conversation layout only for a Session whose workspace actually holds creative work: creative files, a workspace game project or a video project. The bundled game example ships with the plugin and never counts. Without creative work the plugin renders nothing at all, and the official conversation, its Composer, its `Ctrl/Cmd+S` and its file links stay exactly as DSH renders them; the workspace request still follows Agent mutations, so the first creative file an Agent writes hands the layout over inside the same Session. The creator can also take the layout back at any time from any of the four workbenches, which leaves only a launcher floating at the conversation column's own corner. That choice overrides what the workspace contains, and because the DSH Session Store is not persisted it is kept per workspace in browser storage, so a new Session in the same workspace and a restarted DSH both honor it.
+The workbench opens automatically for a Session whose workspace holds creative files, a workspace game project or a video project. The bundled game example never counts as a workspace project. Empty workspaces expose five compact entry buttons and keep the official conversation layout until the creator opens a workbench. Collapsing any workbench restores those entries. The explicit open/closed choice is persisted per workspace in browser storage and takes priority over automatic detection.
 
 The bridge portals its workbench into the stable `conversation.session` layout seam. 小说/短剧 retain the file-tree/editor/Chat three-column surface. 游戏 switches to a focused two-column surface: the generated-game preview owns the larger left region and the mounted official conversation remains the right region, so Chat state, streaming, tools, Todo, approvals, history and Composer continue to use DSH implementations.
 
@@ -65,9 +77,46 @@ Image and video buttons inject an exact prepare-only `/short-drama-produce` requ
 
 Agent operability follows that ownership boundary. The Agent can directly execute a confirmed production turn with the current Preset's visible tools and can change canvas content by editing creator documents or writing media results, which rebuilds the projection. It can also call `oh_story_production`; successful durable tool calls are replayed in official DSH Chat order and idempotently applied to the per-Session Browser Store. Layout, zoom, selected references and sequence preferences remain interface state rather than creative truth. The tool emits no file, media, network or provider side effect and explicitly does not count as creator confirmation, so production authority stays with Drama Skills and DSH approvals rather than a hidden sidecar runtime.
 
-When the Agent is idle, a capture listener recognizes existing workspace file links inside the official conversation. Those links update the same selection state used by Agent file following. Human-dirty buffers take precedence over incoming disk or Agent state and surface a per-file conflict with explicit disk/local resolution. DSH's unpersisted Session Store retains drafts and editor navigation across in-process Session switches and releases them with the Session lifecycle. File reads carry the opaque DSH filesystem version; saves use that version as an atomic precondition and reject stale writes instead of overwriting concurrent disk changes.
+When the Agent is idle, a capture listener recognizes existing workspace file links inside the official conversation. Those links update the same selection state used by Agent file following. Human-dirty buffers take precedence over incoming disk or Agent state and surface a per-file conflict with explicit disk/local resolution. The DSH Session Store retains editor state across in-process Session switches. Separately, the novel and short-drama text editors automatically back up unsaved human drafts to browser `localStorage`, scoped by origin, workspace cwd and Session ID. Only each dirty file's `content`, `saved` baseline and filesystem `version` are backed up; editor navigation and production-panel preferences are not included. Reopening the original Session after a page reload or DSH restart restores its drafts. Changed disk files surface conflicts, deleted files leave drafts available to download or discard, and changes from another page prompt the creator instead of overwriting either draft. Storage failures offer retry and download actions. Backups do not transfer across browsers or origins (including ports), and clearing site data removes them. File reads carry the opaque DSH filesystem version; writing a draft to disk remains an explicit manual save using that version as an atomic precondition, rejecting stale writes instead of overwriting concurrent disk changes.
+
+Draft backup writers hold an exclusive browser Web Lock for their workspace/Session scope. Another page can retain edits in memory but must release the owning page and retry before updating that backup. Browsers without Web Locks report backup unavailability. When drafts first become dirty, `POST /oh-story/draft-session` asks DSH's official `SessionPersistence.ensureMaterialized` to retain the exact live Session, including an empty conversation. This creates no chat event and writes no creative file. The backup status remains pending until that request succeeds, so a creator who only edits documents can still resume after a Host restart.
 
 Markdown rendering is implemented as a safe React element tree with tables, task lists, quotes and fenced code. Raw HTML is treated as text and external links are limited to HTTP(S). JSONL is parsed one record per source line, keeps malformed lines visible, and summarizes stable IDs, types and statuses. Every preview shares its buffer and save path with source editing.
+
+## First-party WeChat Skill
+
+`packages/knowledge/wechat/skills/wechat-article` is a first-party Skill registered
+by its own provider and copied into the release bundle. It is not part of the
+four pinned upstream manifests. Its V5.0-derived workflow keeps each account's
+source corpus, semantic annotations, topic/global style evidence and generated
+articles separate. Python helpers audit files, merge Agent-authored annotations,
+retrieve full reference articles, record image dispatch receipts, render HTML and
+produce PNG text cards. Semantic classification and style analysis remain Agent work.
+
+The `wechat` workbench shares the file tree, editor, conflict checks and draft
+backup mechanism with fiction and drama. Its file route includes Markdown, HTML,
+JSON and raster media under `公众号/<account>/`. Reference originals under each
+account's `参考文章/` directory are read-only in both the editor and PUT route.
+Markdown is parsed with marked and HTML sanitized with DOMPurify; previews use
+an opaque sandboxed iframe with scripts and external resources disabled. Only
+listed raster images from the same account are fetched by the application and
+embedded as data URLs. The creation button prepares `/wechat-article` in the
+current session's official composer. Image jobs can
+reuse the pinned provider adapter without invoking the short-drama lifecycle or
+writing episode paths. The adapter path is supplied by the Skill bridge and must
+exist in the current execution environment. The bundled WeChat publisher uses the
+official stable-token, image/material, draft, freepublish and mass-message APIs.
+It prepares immutable account-bound snapshots, validates source hashes, serializes
+writers per account, caches media per AppID and persists each external operation
+before dispatch. Draft, public publication and subscriber mass sending are distinct
+states. Unknown outcomes require reconciliation; due-time checks do not constitute
+a running scheduler. Credentials stay in the execution environment.
+
+`wechat/upstreams.json` records six researched projects. Selected unmodified MIT
+and Apache reference files and MIT theme definitions are bundled with their licenses
+and hash checks; the renderer consumes the theme color tokens. AGPL and restricted
+source-available projects have provenance entries only, with independent implementations
+for their referenced capabilities. They do not become additional DSH Skill providers.
 
 ## Upstream assets
 
