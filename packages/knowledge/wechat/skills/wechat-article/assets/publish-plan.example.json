@@ -1,0 +1,22 @@
+{
+  "id": "week-01",
+  "jobs": [
+    {
+      "id": "career-001",
+      "account": "career",
+      "delivery": "publish",
+      "articles": [
+        {"article": "创作/ART-001/article-illustrated.md", "cover": "创作/ART-001/images/cover-v1.png", "reviewed": false, "digest": ""}
+      ]
+    },
+    {
+      "id": "life-001",
+      "account": "life",
+      "delivery": "mass",
+      "audience": {"all": true},
+      "articles": [
+        {"article": "创作/ART-001/article-illustrated.md", "cover": "创作/ART-001/images/cover-v1.png", "reviewed": false, "digest": ""}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-09-09",
+  "sources": [
+    {
+      "id": "wewrite",
+      "repository": "imraywang/wewrite",
+      "revision": "a363da0d92d30fc442aba6549d1a8824ebb0c115",
+      "license": "MIT",
+      "integration": "bundled-reference-and-theme-tokens",
+      "files": [
+        {
+          "source": "LICENSE",
+          "target": "LICENSE",
+          "sha256": "ed8ea90fab43dd04ee896edd4b24e6a3e61dd946d6b0b43b67db23b5e58c23f9"
+        },
+        {
+          "source": "skills/wewrite-review/SKILL.md",
+          "target": "review.source.md",
+          "sha256": "3abddf765353e62eaaa9aebbe65e897f5f71156c58f18c9664a375a24adc42f7"
+        },
+        {
+          "source": "skills/wewrite-publish/SKILL.md",
+          "target": "publish.source.md",
+          "sha256": "77d4a89d80d703d0719a1d17c38ab3a48a83e24fda73f6899ac350c082dcaed4"
+        },
+        {
+          "source": "src/wewrite/toolkit/themes/professional-clean.yaml",
+          "target": "themes/professional-clean.yaml",
+          "sha256": "0e6fe6f1df2e8b473eac50fa59755e104b8ad6e65b5e33692e1a324587d90e49"
+        },
+        {
+          "source": "src/wewrite/toolkit/themes/minimal.yaml",
+          "target": "themes/minimal.yaml",
+          "sha256": "3d455f63bc67477e82df4b0825942451e2998856aeb1a593e0644ef1ad55f8c6"
+        },
+        {
+          "source": "src/wewrite/toolkit/themes/newspaper.yaml",
+          "target": "themes/newspaper.yaml",
+          "sha256": "13b8964db63e2f56ed1c2c3dd1147f1e3485af4ededc8b0b44ee59fe9281a365"
+        }
+      ]
+    },
+    {
+      "id": "baoyu",
+      "repository": "JimLiu/baoyu-skills",
+      "revision": "52f3d500db2e4a2c8ded962a4171306966f9a3eb",
+      "license": "MIT",
+      "integration": "bundled-design-references",
+      "files": [
+        {
+          "source": "LICENSE",
+          "target": "LICENSE",
+          "sha256": "601839401f6ce68b7a8aec0f7ba247ab8ef0848113378220bec4b2615cc84ee7"
+        },
+        {
+          "source": "skills/baoyu-article-illustrator/references/prompt-construction.md",
+          "target": "illustration-prompts.source.md",
+          "sha256": "4507d26d49ea875cf0d909f17f7575ae0edef7a759a393f149b0ac497f6233f3"
+        },
+        {
+          "source": "skills/baoyu-post-to-wechat/references/multi-account.md",
+          "target": "multi-account.source.md",
+          "sha256": "bf15bc34787ca89e2e7b593f82f58b2f53a9e5f2340e6f2450443d9d18a9e351"
+        }
+      ]
+    },
+    {
+      "id": "aiworkskills",
+      "repository": "aiworkskills/wechat-article-skills",
+      "revision": "7b55906f454b6214b6ca56151d7a42edc81f4af9",
+      "license": "Apache-2.0",
+      "integration": "bundled-publishing-references",
+      "files": [
+        {
+          "source": "LICENSE",
+          "target": "LICENSE",
+          "sha256": "870ff4d39e4e0b863d1a0622026e360b93d948bc00828ab8ac09ddb544b32368"
+        },
+        {
+          "source": "skills/aws-wechat-article-publish/references/api-reference.md",
+          "target": "api.source.md",
+          "sha256": "fc9c18a19c773b39f4b965c1cc0749050fa4938f1f39945881836a2da97e593d"
+        },
+        {
+          "source": "skills/aws-wechat-article-publish/references/pre-publish-checklist.md",
+          "target": "pre-publish.source.md",
+          "sha256": "91e8761c9e2994f77c988ddb80c8324b8fb75cac3f153621c71cdae600c85be9"
+        }
+      ]
+    },
+    {
+      "id": "gzh-design",
+      "repository": "isjiamu/gzh-design-skill",
+      "revision": "ba1f4175519b481cb3566616c9e5178705067904",
+      "license": "AGPL-3.0-or-later",
+      "integration": "reference-only-independent-layout-implementation",
+      "files": []
+    },
+    {
+      "id": "guizang-social-card",
+      "repository": "op7418/guizang-social-card-skill",
+      "revision": "cf4b810fac1c73fb65a2bb31d8c9278d82cbc4c5",
+      "license": "AGPL-3.0",
+      "integration": "reference-only-independent-card-implementation",
+      "files": []
+    },
+    {
+      "id": "md2wechat",
+      "repository": "geekjourneyx/md2wechat-skill",
+      "revision": "cbc8c600ed1f9cccbc29a33576f657c07d39ba9a",
+      "license": "md2wechat Source Available License",
+      "integration": "reference-only-independent-official-api-implementation",
+      "files": []
+    }
+  ]
+}

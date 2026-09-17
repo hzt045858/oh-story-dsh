@@ -1,0 +1,4 @@
+markdown-it-py>=3.0.0,<5
+Pillow>=10.4.0,<13
+PyYAML>=6.0.2,<7
+requests>=2.32.0,<3

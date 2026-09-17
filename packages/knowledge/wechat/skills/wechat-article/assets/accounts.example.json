@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "accounts": [
+    {"id": "career", "name": "职场号", "root": "职场号", "app_id": "wx1111111111111111", "secret_env": "WECHAT_CAREER_APP_SECRET", "author": "", "theme_preset": "professional-clean"},
+    {"id": "life", "name": "生活号", "root": "生活号", "app_id": "wx2222222222222222", "secret_env": "WECHAT_LIFE_APP_SECRET", "author": "", "theme_preset": "minimal"}
+  ]
+}

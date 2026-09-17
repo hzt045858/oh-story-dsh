@@ -1,0 +1,4 @@
+# Optional local OCR engine. Same version as the previously verified local corpus run.
+# Install into the Python environment explicitly selected for WeChat tasks.
+# Source: https://github.com/RapidAI/RapidOCR (Apache-2.0).
+rapidocr-onnxruntime==1.4.4
