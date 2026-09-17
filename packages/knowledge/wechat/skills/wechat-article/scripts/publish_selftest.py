@@ -16,7 +16,7 @@ import requests
 from PIL import Image
 
 from article_library import load_json, write_json
-from article_card import render_card
+from article_card import default_font, render_card
 from publication_plan import bundle_path, prepare_job, read_plan, registry
 from wechat_api import ApiError, TransportError, WeChatAPI
 from wechat_publish import Publication, account_lock, run_plan
@@ -277,7 +277,12 @@ class PublishingTests(unittest.TestCase):
 
     def test_card_dimensions_and_existing_version_are_preserved(self):
         spec = self.root / "card.json"
-        write_json(spec, {"kind": "card", "title": "Three signals worth checking", "points": ["Tasks", "Information", "Feedback"]})
+        title = "Three signals worth checking"
+        write_json(spec, {"kind": "card", "title": title, "points": ["Tasks", "Information", "Feedback"]})
+        # Card rendering is deliberately tied to a font the host ships (see article_card.FONTS);
+        # a runner without one cannot exercise this capability and must say so instead of failing.
+        if default_font(title) is None:
+            self.skipTest("this host has no local font that can render card text")
         result = render_card(spec, self.root / "card.png")
         self.assertEqual((result["width"], result["height"]), (1080, 1440))
         with Image.open(self.root / "card.png") as image:

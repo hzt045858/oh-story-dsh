@@ -15,9 +15,23 @@ from article_library import digest, load_json, write_json
 FONTS = (
     "C:/Windows/Fonts/msyh.ttc",
     "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/Supplemental/Songti.ttc",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 )
+
+
+def default_font(text: str) -> Path | None:
+    """The first listed path that can render `text`, or None when this host ships no such font.
+
+    Callers that only need to know whether card rendering is possible on this host can ask
+    here instead of catching the error from `render_card`. The last entry is Latin-only, so it
+    is dropped for any non-ASCII text.
+    """
+    candidates = FONTS if text.isascii() else FONTS[:-1]
+    return next((Path(name) for name in candidates if Path(name).is_file()), None)
 
 
 def wrap(text, font, width):
@@ -57,8 +71,7 @@ def render_card(spec_path: Path, output: Path, font_path: Path | None = None):
         raise ValueError("points must contain at most four nonempty text items")
     all_text = title + footer + "".join(points)
     if font_path is None:
-        candidates = FONTS if all_text.isascii() else FONTS[:-1]
-        font_path = next((Path(name) for name in candidates if Path(name).is_file()), None)
+        font_path = default_font(all_text)
     if font_path is None or not font_path.is_file():
         raise ValueError("provide --font with a local font supporting the card language")
     colors = {"accent": "#24755b", "background": "#ffffff", "text": "#232629"}

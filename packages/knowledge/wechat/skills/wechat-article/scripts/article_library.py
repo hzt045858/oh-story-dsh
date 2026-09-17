@@ -70,6 +70,35 @@ def contained(root: Path, relative: str) -> Path:
     return path
 
 
+def account_root(account) -> Path:
+    """The canonical root of an account registry entry.
+
+    `registry()` already resolves the root it derives, but an account dictionary assembled by a
+    caller can carry a Windows 8.3 short name (the runners hand out `RUNNER~1` where the long
+    name is `runneradmin`). Everything this package compares against the root comes back from
+    `resolve()`, so an unresolved root makes `relative_to` raise "is not in the subpath of" on
+    Windows only — the check that should have passed, fails.
+    """
+    return Path(account["root"]).resolve()
+
+
+# Up to Python 3.12 `_markupbase` raised AssertionError for a marked section whose status
+# keyword it did not recognise. Python 3.13 stopped reporting it and silently drops the section,
+# so a malformed export would be scanned as a readable article instead of being counted
+# unreadable. The scan has to reject the same documents on every interpreter, so the rule is
+# spelled out here rather than left to the standard library. The keywords are compared exactly
+# the way `_markupbase` compares them: case-sensitively.
+MARKED_SECTION = re.compile(r"<!\[([A-Za-z][A-Za-z0-9]*)")
+MARKED_SECTION_STATUS = frozenset({"temp", "cdata", "ignore", "include", "rcdata", "if", "else", "endif"})
+
+
+def malformed_markup(body: str) -> str | None:
+    match = MARKED_SECTION.search(body)
+    if match is None or match.group(1) in MARKED_SECTION_STATUS:
+        return None
+    return f"unknown status keyword {match.group(1)!r} in marked section"
+
+
 class ArticleHTML(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -148,6 +177,9 @@ def read_article(path: Path) -> tuple[str, str, str]:
                 parser.feed(body)
             except AssertionError as error:
                 raise ValueError(f"invalid HTML: {error}") from error
+            malformed = malformed_markup(body)
+            if malformed is not None:
+                raise ValueError(f"invalid HTML: {malformed}")
             parts = parser.wechat_text if parser.has_wechat else parser.article_text if parser.has_article else parser.all_text
             body = "".join(parts)
             title = "".join(parser.title_text).strip() or title

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from article_library import contained, digest, load_json, write_json, atomic_text
+from article_library import account_root, contained, digest, load_json, write_json, atomic_text
 from render_article import PRESETS, fragment, preview_document, theme_values
 
 
@@ -155,7 +155,9 @@ def text_field(value, name, maximum, required=False):
 
 
 def prepare_job(account, plan_id, job) -> dict:
-    root = account["root"]
+    # `relative_path` resolves everything it returns, so the root has to be canonical too —
+    # see `account_root` for why an unresolved root fails on Windows only.
+    root = account_root(account)
     files, media, blobs, articles = {}, {}, {}, []
     def remember(path):
         files[path.relative_to(root).as_posix()] = digest(path.read_bytes())

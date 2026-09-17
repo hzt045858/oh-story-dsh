@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-from article_library import atomic_text, digest, load_json, write_json
+from article_library import account_root, atomic_text, digest, load_json, write_json
 from style_release import RELEASE, load_release
 
 WORKFLOW = "controlled-wechat-v1"
@@ -643,12 +643,15 @@ def require_ready(article):
 
 def publication_gate(source, account, cover, title=None):
     article = source.resolve().parent
-    managed = has_contract(article) or (account["root"] / "账号.json").exists()
+    # `safe()` returns resolved paths, so the root has to be canonical before it is compared —
+    # see `account_root` for why an unresolved root fails on Windows only.
+    root = account_root(account)
+    managed = has_contract(article) or (root / "账号.json").exists()
     if not managed:
         # Standalone/manual Markdown remains a separate, explicitly reviewed API use case.
         return {}
     state = current(article)
-    if state["account"].resolve() != account["root"].resolve() or state["account_id"] != account["id"]:
+    if state["account"].resolve() != root or state["account_id"] != account["id"]:
         raise ValueError("publication account differs from the locked creative task")
     ready = require_ready(article)
     if source.name != "article-illustrated.md":
@@ -668,7 +671,7 @@ def publication_gate(source, account, cover, title=None):
              state["record"]["archive"], *ready["files"].keys()]
     for name in names:
         path = safe(article, name, True)
-        files[path.relative_to(account["root"]).as_posix()] = digest(path.read_bytes())
+        files[path.relative_to(root).as_posix()] = digest(path.read_bytes())
     config = obj(safe(state["account"], "账号.json", True))
     if config.get("app_id") is not None and config["app_id"] != account["app_id"]:
         raise ValueError("publication AppID differs from the configured creative account")
