@@ -1517,8 +1517,11 @@ function CreativeWorkbench({
       <nav ref={navRef} aria-label={`${workbenchLabel(workbench)}项目文件`}>
         {Object.entries(buffers).some(([path, value]) => isDirtyDraft(value) && workbenchModeForPath(path) === workbench) && <details className="oh-story-file-group" open>
           <summary>本地草稿</summary>
+          {/* The draft shortcut must not reuse `data-file-path`: that attribute identifies the
+              canonical file-tree node, and the smoke contract queries it unscoped, so a second
+              button carrying it makes every `button[data-file-path=...]` locator ambiguous. */}
           {Object.entries(buffers).filter(([path, value]) => isDirtyDraft(value) && workbenchModeForPath(path) === workbench).map(([path]) => <button
-            type="button" key={path} title={path} aria-label={`本地草稿 ${path}`} data-file-path={path}
+            type="button" key={path} title={path} aria-label={`本地草稿 ${path}`} data-draft-path={path}
             aria-current={selected === path ? "page" : undefined} onClick={() => { revealPath(path); }}
           >{path.split("/").at(-1)}</button>)}
         </details>}
