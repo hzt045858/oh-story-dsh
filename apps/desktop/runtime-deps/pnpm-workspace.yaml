@@ -1,0 +1,14 @@
+packages:
+  - .
+nodeLinker: hoisted
+allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': false
+  koffi: true
+  node-addon-require-builtin: false
+  node-pty: true
+  protobufjs: false
+patchedDependencies:
+  '@deepseek-ai/dsh-client-ui-model-selection@0.1.2-rc.1': patches/@deepseek-ai__dsh-client-ui-model-selection@0.1.2-rc.1.patch
+  '@deepseek-ai/dsh-client-ui-settings-models@0.1.2-rc.1': patches/@deepseek-ai__dsh-client-ui-settings-models@0.1.2-rc.1.patch
+  '@deepseek-ai/dsh-client-ui-workspace@0.1.2-rc.1': patches/@deepseek-ai__dsh-client-ui-workspace@0.1.2-rc.1.patch

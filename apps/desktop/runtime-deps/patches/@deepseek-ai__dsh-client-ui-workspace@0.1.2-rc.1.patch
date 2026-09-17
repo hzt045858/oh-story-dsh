@@ -1,0 +1,158 @@
+diff --git a/lib/client.js b/lib/client.js
+index 09aa4675cfdcc4eb078684931c705758e828b0a4..d36930cf1f994534247dea24b532d204cf995820 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -27,6 +27,7 @@ window.__ModuleLoader__.load({
+ 			workspaces;
+ 			sessions;
+ 			connecting = /* @__PURE__ */ new Map();
++			workspacePickerRequest = (0, _deepseek_ai_dsh_client_store.createSnapshotStore)(false);
+ 			/**
+ 			* @param ctx - Client root Context.
+ 			* @param directoryPicker - the directory-picking Remote namespace.
+@@ -43,11 +44,11 @@ window.__ModuleLoader__.load({
+-			async connectWorkspace(workspaceId) {
++			async connectWorkspace(workspaceId, forceNew = false) {
+ 				const workspace = this.workspaces.list.getSnapshot().items.find((item) => item.workspaceId === workspaceId);
+ 				if (workspace === void 0) throw new Error(`uiWorkspace.connectWorkspace: unknown workspace ${workspaceId}`);
+ 				const inflight = this.connecting.get(workspaceId);
+ 				if (inflight !== void 0) return inflight;
+ 				const archived = this.workspaces.list.getSnapshot().archivedSessionIds;
+ 				const sessions = this.sessions.list.getSnapshot();
+-				for (const id of sessions.ids) {
++				for (const id of forceNew ? [] : sessions.ids) {
+ 					const summary = sessions.byId[id];
+ 					if (summary !== void 0 && summary.blank && summary.cwd === workspace.path && workspace.sessionIds.includes(summary.id) && !archived.includes(summary.id)) return summary.id;
+ 				}
+@@ -66,6 +67,7 @@ window.__ModuleLoader__.load({
+ 				const target = workspaceId ?? currentWorkspaceId ?? recent;
+ 				if (target === void 0) {
+ 					this.sessions.clear();
++					this.workspacePickerRequest.set(true);
+ 					return;
+ 				}
+-				this.connectWorkspace(target).then((sessionId) => {
++				this.connectWorkspace(target, true).then((sessionId) => {
+@@ -308,9 +310,9 @@ window.__ModuleLoader__.load({
+ 		/**
+-		* Ordinary sessions are visible; among blank sessions, only the current one
+-		* is visible. Subagent children use their parent header catalog; archived
++		* Ordinary sessions remain visible after creating another blank session.
++		* Subagent children use their parent header catalog; archived
+ 		* sessions are visible nowhere, while their accounting slots remain so
+ 		* unarchiving restores position.
+ 		*/
+-		function sessionVisible(session, current, archived) {
+-			return session.origin !== "subagent" && !archived.has(session.id) && (!session.blank || session.id === current);
++		function sessionVisible(session, _current, archived) {
++			return session.origin !== "subagent" && !archived.has(session.id);
+ 		}
+@@ -1085,11 +1087,17 @@ window.__ModuleLoader__.load({
+ 			const listSettled = addOnly || workspaceSnapshot.phase === "ready";
+ 			const addIsTheOnlyEntry = !pinAdd && listSettled && addEntries.length === 1;
+ 			(0, react.useEffect)(() => {
++				// Consume repeated requests while the existing chooser or adoption is active.
++				if (open && flowBusy) {
++					onClose();
++					return;
++				}
+ 				if (open && addIsTheOnlyEntry && !flowBusy) openDirectoryFlow();
+ 			}, [
+ 				open,
+ 				addIsTheOnlyEntry,
+ 				flowBusy,
++				onClose,
+ 				openDirectoryFlow
+ 			]);
+ 			/** Owner side of the flow conversation: adopt keeps the flow open (busy) until the Host answers. */
+@@ -1911,7 +1919,7 @@ window.__ModuleLoader__.load({
+ 		* @param props - composed slot props (shell owner share + store + injected actions).
+ 		* @returns the region element tree.
+ 		*/
+-		function WorkspaceBrowser({ wide, expandSidebar, useSessions, useSessionPendingInteraction, useWorkspaces, useStore, actions, startSession, open, renameSession, forkSession, renameWorkspace, deleteWorkspace, insertWorkspaceBefore, archiveSession, insertSessionBefore, createWorkspace, searchSessions, searchResultLimit, useDirectoryFlow, useHostInfo, renderSlot, t }) {
++		function WorkspaceBrowser({ wide, expandSidebar, useSessions, useSessionPendingInteraction, useWorkspaces, useStore, actions, startSession, open, renameSession, forkSession, renameWorkspace, deleteWorkspace, insertWorkspaceBefore, archiveSession, insertSessionBefore, createWorkspace, searchSessions, searchResultLimit, useDirectoryFlow, useHostInfo, useWorkspacePickerRequest, acknowledgeWorkspacePicker, renderSlot, t }) {
+ 			const home = useHostInfo((info) => info.home);
+ 			const workspaces = useWorkspaces((state) => state.items);
+ 			const workspacePhase = useWorkspaces((state) => state.phase);
+@@ -1973,6 +1981,13 @@ window.__ModuleLoader__.load({
+ 			const searchRoot = (0, react.useRef)(null);
+ 			const searchInput = (0, react.useRef)(null);
+ 			const [wsPickerOpen, setWsPickerOpen] = (0, react.useState)(false);
++			const workspacePickerRequested = useWorkspacePickerRequest((requested) => requested);
++			(0, react.useEffect)(() => {
++				if (!workspacePickerRequested || !directoryFlowAvailable) return;
++				acknowledgeWorkspacePicker();
++				expandSidebar();
++				setWsPickerOpen(true);
++			}, [workspacePickerRequested, directoryFlowAvailable, acknowledgeWorkspacePicker, expandSidebar]);
+ 			const wsPlusRef = (0, react.useRef)(null);
+ 			const composingRef = (0, react.useRef)(false);
+ 			const [searchOnExpand, setSearchOnExpand] = (0, react.useState)(false);
+@@ -2663,6 +2678,7 @@ window.__ModuleLoader__.load({
+ 			};
+ 			const pickerFlowSource = flowSource("conversation.hero.workspace.directoryFlow");
+ 			const browserInjected = () => ({
++				acknowledgeWorkspacePicker: () => uiWorkspace.workspacePickerRequest.set(false),
+ 				startSession: (workspaceId) => {
+ 					uiWorkspace.startSession(workspaceId);
+ 				},
+@@ -2703,6 +2719,7 @@ window.__ModuleLoader__.load({
+ 				createWorkspace: (input) => workspaces.create(input),
+ 				hooks: {
+ 					directoryFlow: browserFlowSource,
++					workspacePickerRequest: uiWorkspace.workspacePickerRequest,
+ 					hostInfo
+ 				}
+ 			});
+diff --git a/lib/types/client/contract/slots.d.ts b/lib/types/client/contract/slots.d.ts
+index 14ea9537c6dcfe71aaa0fdf78158228bcff47bfa..13cb259f1c70aa2dd0f55e4ed43ee4f1fd48b9ce 100644
+--- a/lib/types/client/contract/slots.d.ts
++++ b/lib/types/client/contract/slots.d.ts
+@@ -92,7 +92,10 @@ export type WorkspaceBrowserInjected = {
+          * saw. Select the field the surface needs (`info => info.home`).
+          */
+         hostInfo: HostObservable<RemoteHostFacts>;
++        /** Pending first-session directory request; acknowledged when the picker opens. */
++        workspacePickerRequest: HostObservable<boolean>;
+     };
++    acknowledgeWorkspacePicker: () => void;
+     /**
+-     * Start a New Session in a Workspace: reuse-or-create its blank session and
+-     * open it; without an explicit workspace, inherit the current Session
++     * Create and select a new Session in a Workspace; without an explicit
++     * workspace, inherit the current Session
+diff --git a/lib/types/client/navigation.d.ts b/lib/types/client/navigation.d.ts
+index d6e9f99790f08b94a2efe014bfce28531510264e..1066d84eccdca235d31d83108458797f24281c53 100644
+--- a/lib/types/client/navigation.d.ts
++++ b/lib/types/client/navigation.d.ts
+@@ -1,5 +1,6 @@
+ /** Workspace archive and directory UI capability. */
+ import { Service, type Context } from '@deepseek-ai/cordis';
++import type { SnapshotStore } from '@deepseek-ai/dsh-client-store';
+ import type { ClientRemote, DirectoryListing, RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client';
+ import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client';
+ import type { IWorkspaces, WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client';
+@@ -11,7 +12,7 @@ export interface UiWorkspace {
+      * @param workspaceId - target Workspace.
+      * @returns a Session already addressable through the Session Controller.
+      */
+-    connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>;
++    connectWorkspace(workspaceId: WorkspaceId, forceNew?: boolean): Promise<SessionId>;
+     /**
+      * Start a New Session flow and navigate to its Session.
+      * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
+@@ -61,6 +62,7 @@ declare class UiWorkspaceService extends Service implements UiWorkspace {
+     private readonly workspaces;
+     private readonly sessions;
+     private readonly connecting;
++    readonly workspacePickerRequest: SnapshotStore<boolean>;
+     /**
+      * @param ctx - Client root Context.
+      * @param directoryPicker - the directory-picking Remote namespace.
+@@ -70,5 +72,5 @@ declare class UiWorkspaceService extends Service implements UiWorkspace {
+     constructor(ctx: Context, directoryPicker: ClientRemote['directoryPicker'], workspaces: IWorkspaces, sessions: ISessions);
+-    connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId>;
++    connectWorkspace(workspaceId: WorkspaceId, forceNew?: boolean): Promise<SessionId>;
+     startSession(workspaceId?: WorkspaceId): void;
+     archiveSession(sessionId: SessionId): Promise<void>;
+     pickDirectory(): Promise<string | null>;

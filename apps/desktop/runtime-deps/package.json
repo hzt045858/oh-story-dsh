@@ -1,0 +1,9 @@
+{
+  "name": "oh-story-desktop-runtime",
+  "private": true,
+  "version": "0.1.8",
+  "type": "module",
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.2-rc.1"
+  }
+}

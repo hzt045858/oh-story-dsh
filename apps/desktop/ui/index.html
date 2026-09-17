@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oh Story</title>
+    <link rel="stylesheet" href="style.css" />
+    <script defer src="main.js"></script>
+  </head>
+  <body>
+    <main>
+      <img class="brand" src="brand.png" width="80" height="80" alt="" />
+      <h1>Oh Story</h1>
+      <div class="status" role="status" aria-live="polite">
+        <span id="spinner" class="spinner" aria-hidden="true"></span>
+        <h2 id="title">正在启动创作工作台</h2>
+      </div>
+      <p id="message"></p>
+      <div id="actions" hidden>
+        <button id="retry" type="button">重新启动</button>
+        <button id="logs" class="secondary" type="button">打开日志</button>
+        <button id="data" class="secondary" type="button">打开数据目录</button>
+      </div>
+      <p id="action-error" role="alert"></p>
+    </main>
+    <footer>Oh Story · Desktop</footer>
+  </body>
+</html>

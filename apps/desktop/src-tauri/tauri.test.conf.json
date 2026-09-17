@@ -1,0 +1,14 @@
+{
+  "identifier": "com.ohstory.desktop.test",
+  "app": {
+    "windows": [{
+      "label": "main",
+      "create": false,
+      "title": "Oh Story Test",
+      "url": "index.html",
+      "width": 1380,
+      "height": 900,
+      "additionalBrowserArgs": "--remote-debugging-address=127.0.0.1"
+    }]
+  }
+}

@@ -1,0 +1,118 @@
+diff --git a/lib/client.js b/lib/client.js
+index 5233c42..1327845 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -109,6 +109,8 @@ window.__ModuleLoader__.load({
+ 			generation = 0;
+ 			disposed = false;
+ 			resolved = false;
++			pendingSelection;
++			correctedSelection;
+ 			unsubscribeCatalog;
+ 			unsubscribeSelection;
+ 			/**
+@@ -139,6 +141,7 @@ window.__ModuleLoader__.load({
+ 			async load() {
+ 				this.assertAvailable();
++				if (this.store.getSnapshot().status === "error" && this.pendingSelection === void 0) this.correctedSelection = void 0;
+ 				await this.catalog.load();
+ 				this.syncInputs();
+ 				return this.store.getSnapshot();
+ 			}
+@@ -151,27 +154,42 @@ window.__ModuleLoader__.load({
+ 			async select(selection) {
+ 				this.assertAvailable();
+ 				const generation = ++this.generation;
++				this.pendingSelection = selection;
+ 				this.store.update((s) => {
+ 					s.status = "selecting";
+ 					s.error = null;
+ 				});
+-				const result = await this.sessions.selectModel({
+-					sessionId: this.sessionId,
+-					provider: selection.provider,
+-					model: selection.model,
+-					...selection.reasoningEffort === void 0 ? {} : { reasoningEffort: selection.reasoningEffort }
+-				});
++				let result;
++				try {
++					result = await this.sessions.selectModel({
++						sessionId: this.sessionId,
++						provider: selection.provider,
++						model: selection.model,
++						...selection.reasoningEffort === void 0 ? {} : { reasoningEffort: selection.reasoningEffort }
++					});
++				} catch (error) {
++					if (!this.disposed && generation === this.generation) {
++						this.pendingSelection = void 0;
++						this.store.update((s) => {
++							s.status = "error";
++							s.error = error instanceof Error ? error.message : String(error);
++						});
++					}
++					throw error;
++				}
+ 				if (this.disposed || generation !== this.generation) {
+ 					if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+ 					return;
+ 				}
+ 				if (!result.ok) {
++					this.pendingSelection = void 0;
+ 					this.store.update((s) => {
+ 						s.status = "error";
+ 						s.error = `${result.error.code}: ${result.error.message}`;
+ 					});
+ 					throw new Error(`session.selectModel failed: ${result.error.code}: ${result.error.message}`);
+ 				}
++				this.pendingSelection = result.value.selected;
+ 				this.store.update((s) => {
+ 					s.status = "ready";
+ 					s.error = null;
+@@ -184,6 +202,8 @@ window.__ModuleLoader__.load({
+ 			resetConnected() {
+ 				if (this.disposed) return;
+ 				++this.generation;
++				this.pendingSelection = void 0;
++				this.correctedSelection = void 0;
+ 				this.store.update((state) => {
+ 					if (state.status === "selecting") state.status = "idle";
+ 					state.error = null;
+@@ -222,15 +242,28 @@ window.__ModuleLoader__.load({
+ 					return;
+ 				}
+ 				const current = projected.next ?? catalog.value.default;
++				const selectionKey = JSON.stringify([current.provider, current.model, current.reasoningEffort]);
++				const pending = this.pendingSelection;
++				if (pending !== void 0 && pending.provider === current.provider && pending.model === current.model && pending.reasoningEffort === current.reasoningEffort) this.pendingSelection = void 0;
++				const model = catalog.value.groups.find((group) => group.id === current.provider)?.models.find((model) => model.id === current.model);
++				const invalidEffort = current.reasoningEffort !== void 0 && model !== void 0 && !model.reasoning?.efforts.some((effort) => effort.id === current.reasoningEffort);
++				if (!invalidEffort) this.correctedSelection = void 0;
++				const previous = this.store.getSnapshot();
++				const correctionFailed = invalidEffort && this.correctedSelection === selectionKey && previous.status === "error";
+ 				this.resolved = true;
+ 				this.store.set({
+ 					current,
+-					routable: catalog.value.routableProviders.includes(current.provider),
++					routable: !invalidEffort && catalog.value.routableProviders.includes(current.provider),
+ 					groups: catalog.value.groups,
+ 					failures: catalog.value.failures,
+-					status: this.store.getSnapshot().status === "selecting" ? "selecting" : "ready",
+-					error: null
++					status: previous.status === "selecting" ? "selecting" : correctionFailed ? "error" : "ready",
++					error: correctionFailed ? previous.error : null
+ 				});
++				// Persist one correction; wait for its projection before considering another write.
++				if (invalidEffort && this.available() && previous.status !== "selecting" && this.pendingSelection === void 0 && this.correctedSelection !== selectionKey) {
++					this.correctedSelection = selectionKey;
++					this.select({ provider: current.provider, model: current.model }).catch(() => {});
++				}
+ 			}
+ 		};
+ 		function modelSelectionProjection(value) {
+@@ -900,4 +933,4 @@ window.__ModuleLoader__.load({
+ 	}
+ });
+ 
+-//# sourceMappingURL=client.js.map
+\ No newline at end of file
++//# sourceMappingURL=client.js.map

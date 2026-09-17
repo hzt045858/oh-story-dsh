@@ -1,0 +1,21 @@
+import { createHash } from "node:crypto";
+import { cp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
+
+const root = resolve(import.meta.dirname, "..");
+const release = join(root, "release");
+const metadata = JSON.parse(await readFile(join(root, "apps/desktop/package.json"), "utf8")) as { version: string };
+const destination = join(release, `Oh-Story-${metadata.version}-windows-x64`);
+await mkdir(release, { recursive: true });
+const canonical = await realpath(destination).catch(() => destination);
+if (!canonical.startsWith(`${await realpath(release)}${sep}`)) throw new Error("Portable destination escapes the release directory.");
+await rm(destination, { recursive: true, force: true });
+await mkdir(destination, { recursive: true });
+const executable = join(destination, "Oh Story.exe");
+await cp(join(root, "apps/desktop/src-tauri/target/release/oh-story-desktop.exe"), executable);
+await cp(join(root, "apps/desktop/runtime"), join(destination, "runtime"), { recursive: true, dereference: true });
+await cp(join(root, "docs/DESKTOP.md"), join(destination, "DESKTOP.md"));
+await cp(join(root, "LICENSE"), join(destination, "LICENSE"));
+const digest = createHash("sha256").update(await readFile(executable)).digest("hex");
+await writeFile(join(destination, "SHA256SUMS.txt"), `${digest}  Oh Story.exe\n`);
+console.log(`Portable desktop: ${executable}`);

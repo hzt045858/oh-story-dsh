@@ -1,0 +1,195 @@
+diff --git a/lib/client.js b/lib/client.js
+index ee58176..75cc85e 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -471,6 +471,81 @@ window.__ModuleLoader__.load({
+ 			const value = model[key];
+ 			return typeof value === "number" ? value : void 0;
+ 		}
++		const MODEL_REASONING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
++		function validatePiAiModels(value) {
++			const capacityFailure = validateDeepSeekModels(value);
++			if (capacityFailure !== void 0) return capacityFailure;
++			for (const [index, model] of modelDrafts(value).entries()) {
++				const efforts = model["reasoningEfforts"];
++				if (efforts === void 0 || efforts === false) continue;
++				if (typeof efforts !== "object" || efforts === null || Array.isArray(efforts)) return { index, key: "modelReasoningInvalid" };
++				const entries = Object.entries(efforts);
++				if (!entries.some(([level]) => level !== "off") || entries.some(([level, wire]) => !MODEL_REASONING_LEVELS.includes(level) || (level === "off" && wire === null ? false : typeof wire !== "string" || wire.trim().length === 0))) return { index, key: "modelReasoningInvalid" };
++			}
++		}
++		/** Per-model declarations stay independent from the provider's request default. */
++		function ModelReasoningEditor({ value, onChange, index, disabled, t }) {
++			const mode = value === void 0 ? "inherit" : value === false ? "disabled" : "custom";
++			const efforts = typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
++			const updateLevel = (level, wire) => onChange({ ...efforts, [level]: wire });
++			return (0, react_jsx_runtime.jsxs)("div", {
++				className: ModelsSection_module_css_default["modelField"],
++				style: { gridColumn: "1 / -1" },
++				children: [(0, react_jsx_runtime.jsxs)("label", {
++					className: ModelsSection_module_css_default["modelField"],
++					children: [(0, react_jsx_runtime.jsx)("span", {
++						className: ModelsSection_module_css_default["modelFieldLabel"],
++						children: t("modelReasoning")
++					}), (0, react_jsx_runtime.jsx)("select", {
++						className: `${ModelsSection_module_css_default["input"]} ${ModelsSection_module_css_default["selectInput"]}`,
++						"aria-label": `${t("modelReasoning")} ${index + 1}`,
++						value: mode,
++						disabled,
++						onChange: (event) => onChange(event.target.value === "inherit" ? void 0 : event.target.value === "disabled" ? false : { low: "low", medium: "medium", high: "high" }),
++						children: [["inherit", "reasoningInherited"], ["disabled", "reasoningDisabled"], ["custom", "reasoningCustom"]].map(([id, key]) => (0, react_jsx_runtime.jsx)("option", { value: id, children: t(key) }, id))
++					})]
++				}), mode === "custom" ? (0, react_jsx_runtime.jsx)("div", {
++					className: ModelsSection_module_css_default["modelAdvanced"],
++					style: { padding: 0 },
++					children: MODEL_REASONING_LEVELS.map((level) => {
++						const enabled = Object.prototype.hasOwnProperty.call(efforts, level);
++						const wire = efforts[level];
++						return (0, react_jsx_runtime.jsxs)("div", {
++							className: ModelsSection_module_css_default["modelField"],
++							children: [(0, react_jsx_runtime.jsxs)("label", {
++								className: ModelsSection_module_css_default["fieldLabel"],
++								children: [(0, react_jsx_runtime.jsx)("input", {
++									type: "checkbox",
++									checked: enabled,
++									"aria-label": `${t("reasoningLevel")} ${level} ${index + 1}`,
++									disabled,
++									onChange: (event) => {
++										if (event.target.checked) updateLevel(level, level === "off" ? "none" : level);
++										else {
++											const next = { ...efforts };
++											Reflect.deleteProperty(next, level);
++											onChange(next);
++										}
++									}
++								}), level]
++							}), (0, react_jsx_runtime.jsx)("input", {
++								className: ModelsSection_module_css_default["input"],
++								type: "text",
++								"aria-label": `${t("reasoningWireValue")} ${level} ${index + 1}`,
++								value: typeof wire === "string" ? wire : "",
++								placeholder: level === "off" ? t("reasoningProtocolDefault") : level,
++								disabled: disabled || !enabled,
++								onChange: (event) => updateLevel(level, level === "off" && event.target.value === "" ? null : event.target.value),
++								onBlur: (event) => {
++									const trimmed = event.target.value.trim();
++									if (trimmed !== event.target.value) updateLevel(level, level === "off" && trimmed.length === 0 ? null : trimmed);
++								}
++							})]
++						}, level);
++					})
++				}) : null]
++			});
++		}
+ 		/** Disclosure chevron; rotates to point down while its row is open. */
+ 		function IconChevron({ open }) {
+ 			return (0, react_jsx_runtime.jsx)("svg", {
+@@ -788,6 +863,12 @@ window.__ModuleLoader__.load({
+ 										editCapacity(index, "maxTokens", event.target.value);
+ 									}
+ 								})]
++							}), (0, react_jsx_runtime.jsx)(ModelReasoningEditor, {
++								value: model["reasoningEfforts"],
++								onChange: (value) => patch(index, { reasoningEfforts: value }),
++								index,
++								disabled,
++								t
+ 							})]
+ 						}) : null]
+ 					}, index)),
+@@ -1124,11 +1205,8 @@ window.__ModuleLoader__.load({
+ 		* and at least one model — are required here rather than at load, so the
+ 		* failure names the field while the user is still looking at it.
+ 		*
+-		* There is deliberately no reasoning-effort control, here or on the editor
+-		* card: effort is a per-MODEL capability, and the models under one provider
+-		* disagree about it, so a provider-scoped control can only be set to a value
+-		* some of them reject. The composer's model picker offers each model its own
+-		* levels instead.
++		* Reasoning capabilities are edited per model. The composer's model picker
++		* selects a level for the session; there is no provider-wide effort control.
+ 		*/
+ 		/** The settings namespace a hand-declared provider is written into. */
+ 		const NS$1 = "llm-pi-ai";
+@@ -1168,7 +1246,7 @@ window.__ModuleLoader__.load({
+ 			const profileDisabled = disabled || committed;
+ 			const routeInvalid = route.length > 0 && !ROUTE_PATTERN.test(route);
+ 			const routeTaken = taken.includes(route);
+-			const modelFailure = validateDeepSeekModels(models);
++			const modelFailure = validatePiAiModels(models);
+ 			const keyFailure = apiKeyFailure(keyDraft);
+ 			const keyValue = keyDraft.trim();
+ 			const ready = route.length > 0 && !routeInvalid && !routeTaken && baseURL.length > 0 && models.length > 0 && modelFailure === void 0 && keyFailure === void 0;
+@@ -1377,10 +1455,8 @@ window.__ModuleLoader__.load({
+ 		* display name and wire protocol of a pi-ai route the adapter does not ship —
+ 		* the two fields the create card asked that route for, editable here for the
+ 		* same reason).
+-		* Reasoning effort is deliberately absent: it is a per-MODEL capability, and
+-		* the models under one provider disagree about it, so a provider-scoped
+-		* control can only be set to a value some of them reject. The composer's
+-		* model picker offers each model its own levels; `settings.yaml` keeps the
++		* Reasoning capabilities are edited per model. The composer's model picker
++		* offers each model its own levels; `settings.yaml` keeps the
+ 		* profile field for a deployment that knows its route. Everything else stays
+ 		* owned by `settings.yaml`. Profile edits land as minimal `settings.mutate`
+ 		* path ops against the stored section — the card names only the fields it can
+@@ -1481,7 +1557,8 @@ window.__ModuleLoader__.load({
+ 				const value = next === void 0 || next.trim().length === 0 ? void 0 : next;
+ 				setDraft((current) => value === void 0 ? schema.deletePath(current, [key]) : schema.setPath(current, [key], value));
+ 			};
+-			const modelFailure = validateDeepSeekModels(schema.getPath(draft, ["models"]));
++			const validateModels = layout === "pi-ai" ? validatePiAiModels : validateDeepSeekModels;
++			const modelFailure = validateModels(schema.getPath(draft, ["models"]));
+ 			const keyFailure = apiKeyFailure(keyDraft);
+ 			const keyValue = keyDraft.trim();
+ 			const shownKeyFailure = (props.credentialRequired === true && keyDraft.length > 0 && keyValue.length === 0 ? "keyRequired" : void 0) ?? keyFailure;
+@@ -1504,7 +1581,7 @@ window.__ModuleLoader__.load({
+ 				const ns = namespace.ns;
+ 				const next = layout === "pi-ai" && stringAt(draft, "apiKeyEnv") === void 0 && stringAt(fallback, "apiKeyEnv") === void 0 && keyValue.length > 0 ? schema.setPath(draft, ["apiKeyEnv"], keyRef) : draft;
+ 				if (props.credentialOnly !== true) {
+-					const failure = validateDeepSeekModels(schema.getPath(next, ["models"]));
++					const failure = validateModels(schema.getPath(next, ["models"]));
+ 					/* v8 ignore next 3 -- unreachable from the card: the same failure disables submit */
+ 					if (failure !== void 0) return `${t("model")} ${String(failure.index + 1)}: ${t(failure.key)}`;
+ 				}
+@@ -2664,7 +2741,15 @@ window.__ModuleLoader__.load({
+ 			contextWindowPlaceholder: "Uses the provider default",
+ 			maxTokens: "Max output tokens",
+ 			maxTokensPlaceholder: "Uses the provider default",
+-			modelAdvanced: "Capacities",
++			modelAdvanced: "Advanced settings",
++			modelReasoning: "Reasoning levels",
++			reasoningInherited: "Inherit model defaults",
++			reasoningDisabled: "No reasoning levels",
++			reasoningCustom: "Custom levels",
++			reasoningLevel: "Enabled level",
++			reasoningWireValue: "Request value",
++			reasoningProtocolDefault: "Protocol default",
++			modelReasoningInvalid: "Enable at least one reasoning level with a non-empty request value.",
+ 			addModel: "Add model",
+ 			removeModel: "Delete model",
+ 			modelsEmpty: "No models will be shown in the selector. Unlisted IDs can still be sent directly.",
+@@ -2766,7 +2851,15 @@ window.__ModuleLoader__.load({
+ 			contextWindowPlaceholder: "使用提供方默认值",
+ 			maxTokens: "最大输出 token 数",
+ 			maxTokensPlaceholder: "使用提供方默认值",
+-			modelAdvanced: "容量",
++			modelAdvanced: "高级设置",
++			modelReasoning: "推理强度",
++			reasoningInherited: "继承模型默认值",
++			reasoningDisabled: "无推理强度",
++			reasoningCustom: "自定义强度",
++			reasoningLevel: "启用强度",
++			reasoningWireValue: "请求值",
++			reasoningProtocolDefault: "协议默认值",
++			modelReasoningInvalid: "至少启用一个推理等级，并填写非空请求值。",
+ 			addModel: "添加模型",
+ 			removeModel: "删除模型",
+ 			modelsEmpty: "模型选择器中将不显示任何模型；目录外 ID 仍可直接发送。",
+@@ -2942,4 +3035,4 @@ window.__ModuleLoader__.load({
+ 	}
+ });
+ 
+-//# sourceMappingURL=client.js.map
+\ No newline at end of file
++//# sourceMappingURL=client.js.map

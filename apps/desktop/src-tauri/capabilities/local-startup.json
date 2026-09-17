@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "local-startup",
+  "description": "The bundled startup page can inspect and restart its own runtime and open its data folders.",
+  "local": true,
+  "windows": ["main"],
+  "permissions": [
+    "allow-desktop-status",
+    "allow-desktop-retry",
+    "allow-desktop-open-data",
+    "allow-desktop-open-logs"
+  ]
+}

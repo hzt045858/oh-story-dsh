@@ -1,0 +1,46 @@
+name: Windows Desktop
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - "scripts/*desktop*.ts"
+      - ".github/workflows/desktop.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:desktop
+      - run: pnpm desktop:prepare
+      - run: pnpm --filter @oh-story/desktop test:models
+      - run: pnpm --filter @oh-story/desktop test:navigation
+      - run: cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - run: pnpm test:desktop:native
+      - run: pnpm test:desktop:native --skip-build --models-only
+      - run: pnpm desktop:portable
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Oh-Story-windows-x64
+          path: release/Oh-Story-*-windows-x64/
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: desktop-test-evidence
+          path: test-results/desktop/
+          if-no-files-found: ignore
