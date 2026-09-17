@@ -52,6 +52,8 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 
 开始 AI 创作前，在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。只查看已有作品可在首次引导中选择「稍后配置 / Configure later」。
 
+npm 上的 `@oh-story/dsh` 由上游仓库维护，内容等于上游的四条流水线。本仓库自研的**公众号工作台**与 **Windows 桌面版**不在其中：要拿到它们，请从本仓库 GitHub Release 安装预构建包（把下面命令里的仓库地址换成本仓库），桌面版见 [Windows 桌面版](#windows-桌面版)。
+
 <details>
 <summary>从 GitHub Release 安装预构建包</summary>
 

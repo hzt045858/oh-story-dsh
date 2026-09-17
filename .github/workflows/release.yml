@@ -66,7 +66,11 @@ jobs:
               --title "oh-story-dsh $GITHUB_REF_NAME"
           fi
       - name: Publish npm package
-        if: startsWith(github.ref, 'refs/tags/')
+        # `@oh-story/dsh` is owned by the upstream repository, so a fork can never
+        # publish it. Skipping the step keeps a fork tag from turning red after its
+        # GitHub Release has already been created — the release asset carries the
+        # same tarball, which is how a fork is meant to be installed.
+        if: startsWith(github.ref, 'refs/tags/') && github.repository == 'zenstory-ai/oh-story-dsh'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |

@@ -52,6 +52,8 @@ Keep the terminal running; the browser opens automatically by default. If it doe
 
 Before creating with AI, add a Provider and API key under DSH's Settings → Models, or set the `DEEPSEEK_API_KEY` environment variable before starting. To only browse existing work, choose "Configure later" in the first-run guide.
 
+`@oh-story/dsh` on npm is maintained by the upstream repository and matches upstream's four pipelines. The **WeChat workbench** and the **Windows desktop edition** built in this repository are not part of it: to get them, install the prebuilt package from this repository's GitHub Release (swap the repository in the command below for this one); for the desktop edition see [Windows desktop edition](#windows-desktop-edition).
+
 <details>
 <summary>Install the prebuilt package from the GitHub Release</summary>
 

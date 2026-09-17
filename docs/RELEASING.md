@@ -5,6 +5,10 @@ GitHub Releases. A release is created only from a `v<package-version>` tag.
 
 ## One-time npm setup
 
+This section applies to the upstream repository `zenstory-ai/oh-story-dsh`,
+which owns the `@oh-story/dsh` package name on npm. A fork cannot publish that
+name and does not need this setup — see [Releasing from a fork](#releasing-from-a-fork).
+
 The npm account used for the first publication must be allowed to publish the
 public `@oh-story/dsh` package. Store a granular publish token as the repository
 secret `NPM_TOKEN`; never commit it or put it in an issue, workflow file, or
@@ -35,8 +39,26 @@ The release workflow then:
 4. uploads the tarball and SHA-256 checksum to a GitHub Release;
 5. publishes the identical tarball to npm with provenance.
 
-The GitHub Release and npm steps are idempotent so a failed workflow can be
-safely re-run.
+Step 5 only runs in the upstream repository. The GitHub Release and npm steps are
+idempotent so a failed workflow can be safely re-run.
+
+## Releasing from a fork
+
+A fork carries its own work on top of upstream, so it needs its own distribution
+path. The workflow supports this without any extra configuration:
+
+- steps 1–4 run normally, using the fork's `github.token` for the GitHub Release;
+- step 5 is skipped by the `github.repository == 'zenstory-ai/oh-story-dsh'`
+  guard, because npm package names are globally unique and a fork can never
+  publish `@oh-story/dsh`.
+
+Pushing a `v<package-version>` tag to a fork therefore produces a GitHub Release
+whose tarball is the fork's own build — self-built features included. Install
+from that asset URL, never from npm, when the goal is the fork's functionality.
+
+The version in `package.json` must still be bumped for every fork release: the
+tag/version match check in step 3 fails on a reused version, and GitHub Releases
+reject duplicate tag names.
 
 ## Verify the public installation
 
@@ -53,3 +75,14 @@ The GitHub Release tarball remains a registry-independent installation path:
 ```bash
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add "https://github.com/zenstory-ai/oh-story-dsh/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
 ```
+
+For a fork, replace the repository in that URL with the fork's own
+`<owner>/<repo>` and skip the npm check above:
+
+```bash
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add "https://github.com/<owner>/<repo>/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
+```
+
+Confirm the release page lists both `oh-story-dsh-$VERSION.tgz` and its
+`SHA256SUMS` file before announcing; the checksum is the only integrity signal a
+registry-independent install has.
