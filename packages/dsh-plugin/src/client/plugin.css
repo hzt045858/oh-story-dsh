@@ -863,7 +863,15 @@
   grid-row: 2;
 }
 [data-conversation-scroll][data-oh-story-layout="compact"]:is([data-oh-story-workbench="story"], [data-oh-story-workbench="drama"], [data-oh-story-workbench="wechat"]):has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"])
-  > [data-composer-seat] { align-self: end; top: auto; bottom: 0; }
+  > [data-composer-seat] {
+  align-self: end;
+  /* A `bottom` constraint cannot move a sticky box whose normal position is already above the
+     viewport, so a long answer scrolled to its end left the composer off-screen: the seat stayed
+     at its row-2 slot (content y ≈ 690) while the viewport had scrolled past 2600. The `top`
+     constraint is what pulls it back into view, and it matches the general seat rule above. */
+  top: calc(var(--oh-story-scroll-height, 720px) - max(var(--dsh-composer-height, 152px), var(--oh-story-composer-height, 0px)));
+  bottom: auto;
+}
 
 [data-oh-story-layout="medium"] .oh-story-file-folder > summary { padding-left: min(calc(7px + var(--oh-story-indent, 0px)), 35px); }
 [data-oh-story-layout="medium"] .oh-story-mode-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
