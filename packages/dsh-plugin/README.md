@@ -4,12 +4,13 @@
 
 ![小说工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/story-workbench-demo.gif)
 
-`oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区小说、短剧、互动游戏与视频解说创作插件，提供：
+`oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区小说、短剧、互动游戏、视频解说与公众号创作插件，提供：
 
 - 13 个 Oh Story 小说 Skills 与 7 个专业 Roles；
 - 11 个 Drama Skills 0.7.0 短剧流程，每集按请求维护最多五份 creator-first Markdown，成片装配另写《剪辑单.md》；
 - 7 个 NovelToGame 0.3.1 Skills、`game-adaptations/<project>` 产物协议与《金瓶梅 · 风月总账》可玩构建；
 - 6 个 video-recap-skills 0.5.0 Skills、`video-recaps/<project>` 项目约定与轻量视频预览工作台；
+- 公众号创作工作台（`/wechat-article`）：按 `公众号/<账号>/` 组织文章、风格模型与排版成果，覆盖建库、写作、配图与草稿箱发布；
 - 小说协议 hooks 与安全的 Session workspace 文件路由；
 - 小说/短剧的文件树、编辑器、Chat 三栏工作台，以及游戏/视频的“左侧工作台 + 右侧 Chat”制作面板；
 - Markdown 与 JSONL 结构化预览；
@@ -34,13 +35,15 @@ npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --
 npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 
+npm 上的 `@oh-story/dsh` 由上游仓库维护，只含上游的四条流水线。公众号工作台是自研分支的增量，只出现在该分支自己的 GitHub Release 资产里——需要它时，把上面命令里的仓库地址换成分支所在仓库再安装。
+
 保持终端运行。若浏览器未自动打开，访问终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接完成首次认证。
 
 需要 Node.js 24+。开始 AI 创作前需要在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。
 
-首次首页尚无创作工作台。点击左侧 Workspaces 旁的 ＋（添加工作区 / Add workspace）选择作品文件夹，再在下方「选择工作区 / Choose workspace」中选中该目录（或打开已有会话），目录里已有创作项目时，会显示「小说 / 短剧 / 游戏 / 视频」标签；查看已有作品无需 API Key。
+首次首页尚无创作工作台。点击左侧 Workspaces 旁的 ＋（添加工作区 / Add workspace）选择作品文件夹，再在下方「选择工作区 / Choose workspace」中选中该目录（或打开已有会话），目录里已有创作项目时，会显示「小说 / 短剧 / 游戏 / 视频 / 公众号」标签；查看已有作品无需 API Key。
 
-配置模型后，在普通 Agent 会话中使用 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`。空目录会保留 DSH 原生 Chat，Agent 写出第一个创作文件后工作台才会自动出现。工作台收起后，可通过会话区的「创作工作台」按钮重新打开。模型、凭据、Preset、权限、会话记录、停止/继续、Todo、审批和 Composer 均沿用当前 DeepSeek Harness 配置与界面。
+配置模型后，在普通 Agent 会话中使用 `/story`、`/short-drama`、`/novel-to-game quick`、`/video-recap` 或 `/wechat-article`。空目录会保留 DSH 原生 Chat，Agent 写出第一个创作文件后工作台才会自动出现。工作台收起后，可通过会话区的「创作工作台」按钮重新打开。模型、凭据、Preset、权限、会话记录、停止/继续、Todo、审批和 Composer 均沿用当前 DeepSeek Harness 配置与界面。
 
 ## 短剧工作台
 
@@ -70,11 +73,25 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 
 Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-first 项目。旧项目应继续锁定 v0.5 并只读保留；迁移时请新建项目根，逐集人工确认当前工作实际需要的 `剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md` 或 `视频提示词.md`，不要预建空文档。
 
+## 公众号工作台
+
+首页与会话工作台均提供独立的「公众号」入口，按 `公众号/<账号>/` 组织文章、风格文件与排版成果。支持 Markdown/HTML 源码编辑、手机/桌面预览、本地配图、版本校验保存与未保存草稿恢复；`参考文章/` 下的原文只读，文章预览禁用脚本和外部资源，不会自动上传或发布。
+
+`/wechat-article` 先全量阅读参考文章，建立文章索引、分主题与全局/图文风格模型；后续按「新选题 + 已保存风格模型」写作，无需再读原文。图片型账号同时分析图片文字、画面、图文关系与多图结构，OCR 仅辅助读字，默认生成实际图片正文。支持独立账号目录、增量资料审计、断点续做、封面/正文配图、程序字卡与微信 HTML 排版。
+
+```text
+/wechat-article 分析这个参考文章目录，为“职场号”建立风格库
+/wechat-article 新选题：领导突然不再安排重要工作，写完整正文
+/wechat-article 将本周审核完成的文章上传到职场号、生活号各自的草稿箱
+```
+
+发布侧已内置账号注册、发布准备、封面/正文图片上传、草稿创建与更新、指定接收者预览、公开发布、按标签/全体群发、状态查询与回执恢复。公开发布与群发分别处理，提交任务不会被当作已完成。微信账号配置仅保存 AppID 与密钥环境变量名，各账号的素材、草稿与回执隔离；实际调用需具备微信接口权限和 IP 白名单。
+
 ## 没看到界面时
 
 - **安装报 `pnpm not found on PATH`**：重新执行上面带 `--package pnpm@11.7.0` 的完整安装命令，确认安装成功后再启动。
 - **浏览器未打开或要求认证**：打开终端打印的完整带 `?token=...` 链接；端口被占用时用 `web --port 3081`，并访问新打印的链接。
-- **没有四个创作标签**：先添加作品目录并打开会话。空目录需要先在 Chat 中运行创作命令，生成创作文件后工作台才会出现；已收起的工作台可用会话区的「创作工作台」按钮恢复。已有作品仍不显示时，检查安装与启动是否使用同一个 profile，重启 DSH 并刷新页面。
+- **没有五个创作标签**：先添加作品目录并打开会话。空目录需要先在 Chat 中运行创作命令，生成创作文件后工作台才会出现；已收起的工作台可用会话区的「创作工作台」按钮恢复。已有作品仍不显示时，检查安装与启动是否使用同一个 profile，重启 DSH 并刷新页面。公众号标签还要求目录里有 `公众号/<账号>/` 结构，且安装的是带该工作台的包（见「安装」一节）。
 - **独立 `story` profile 没有网页服务**：按下节补上 `@deepseek-ai/dsh-web-app`，仅安装创作插件不会给新 profile 添加 Web 界面。
 
 ## 按需加载
