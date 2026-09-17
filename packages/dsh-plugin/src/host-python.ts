@@ -22,13 +22,23 @@ export function pythonVersion(value: string | undefined): PythonProbe {
 }
 
 /**
- * The interpreter the host will run upstream scripts with. The first command
- * that meets the version floor wins; an interpreter that answers but is too old
- * is reported only when nothing better exists, so `python3` at 3.9 does not hide
- * `python` at 3.12. The command is written into the adapter config's argv, so
- * this is the same choice everywhere the plugin starts Python.
+ * The interpreter the host will run upstream scripts with.
+ *
+ * An explicit `OH_STORY_PYTHON` wins outright — even when its probe fails. The
+ * creator pinned that interpreter on purpose, and quietly running a different
+ * one would hide the mistake behind a green preflight.
+ *
+ * Otherwise the first command that meets the version floor wins; an interpreter
+ * that answers but is too old is reported only when nothing better exists, so
+ * `python3` at 3.9 does not hide `python` at 3.12. The command is written into
+ * the adapter config's argv, so this is the same choice everywhere the plugin
+ * starts Python.
  */
-export async function hostPython(probe: (command: string, args: readonly string[]) => Promise<string | undefined> = commandOutput): Promise<{ readonly command: string; readonly probe: PythonProbe }> {
+export async function hostPython(probe: (command: string, args: readonly string[]) => Promise<string | undefined> = commandOutput, env: NodeJS.ProcessEnv = process.env): Promise<{ readonly command: string; readonly probe: PythonProbe }> {
+  const override = (env.OH_STORY_PYTHON ?? "").trim();
+  if (override !== "") {
+    return { command: override, probe: pythonVersion(await probe(override, ["--version"])) };
+  }
   let fallback: { readonly command: string; readonly probe: PythonProbe } | undefined;
   for (const command of ["python3", "python"]) {
     const parsed = pythonVersion(await probe(command, ["--version"]));

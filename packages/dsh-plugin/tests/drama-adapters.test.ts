@@ -117,8 +117,30 @@ describe("adapter config hardening", () => {
 describe("host Python selection", () => {
   it("prefers the first interpreter meeting the 3.10 floor over an older one that answers first", async () => {
     const outputs: Record<string, string | undefined> = { python3: "Python 3.9.18", python: "Python 3.12.1" };
-    expect(await hostPython((command) => Promise.resolve(outputs[command]))).toEqual({ command: "python", probe: { ok: true, version: "3.12.1" } });
-    expect(await hostPython((command) => Promise.resolve(command === "python3" ? "Python 3.9.18" : undefined))).toEqual({ command: "python3", probe: { ok: false, version: "3.9.18" } });
-    expect(await hostPython(() => Promise.resolve(undefined))).toEqual({ command: "python3", probe: { ok: false } });
+    expect(await hostPython((command) => Promise.resolve(outputs[command]), {})).toEqual({ command: "python", probe: { ok: true, version: "3.12.1" } });
+    expect(await hostPython((command) => Promise.resolve(command === "python3" ? "Python 3.9.18" : undefined), {})).toEqual({ command: "python3", probe: { ok: false, version: "3.9.18" } });
+    expect(await hostPython(() => Promise.resolve(undefined), {})).toEqual({ command: "python3", probe: { ok: false } });
+  });
+
+  it("lets an explicit OH_STORY_PYTHON outrank both probed commands", async () => {
+    const probed: string[] = [];
+    const probe = (command: string): Promise<string | undefined> => {
+      probed.push(command);
+      return Promise.resolve("Python 3.12.1");
+    };
+    expect(await hostPython(probe, { OH_STORY_PYTHON: "D:/anaconda3/python.exe" })).toEqual({ command: "D:/anaconda3/python.exe", probe: { ok: true, version: "3.12.1" } });
+    expect(probed).toEqual(["D:/anaconda3/python.exe"]);
+  });
+
+  it("reports a pinned interpreter that cannot be probed instead of silently choosing another", async () => {
+    const probe = (command: string): Promise<string | undefined> => Promise.resolve(command === "/missing/python" ? undefined : "Python 3.12.1");
+    expect(await hostPython(probe, { OH_STORY_PYTHON: "/missing/python" })).toEqual({ command: "/missing/python", probe: { ok: false } });
+  });
+
+  it("treats a blank or whitespace-only override as unset", async () => {
+    const outputs: Record<string, string | undefined> = { python3: "Python 3.12.1" };
+    const probe = (command: string): Promise<string | undefined> => Promise.resolve(outputs[command]);
+    expect(await hostPython(probe, { OH_STORY_PYTHON: "   " })).toEqual({ command: "python3", probe: { ok: true, version: "3.12.1" } });
+    expect(await hostPython(probe, { OH_STORY_PYTHON: "" })).toEqual({ command: "python3", probe: { ok: true, version: "3.12.1" } });
   });
 });

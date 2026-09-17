@@ -71,12 +71,16 @@ DSH 的 `plugin add` 内部需要 pnpm，命令里的 `--package pnpm@11.7.0` �
 
 视频工作台的流水线还需要宿主机安装 Python 3.10+ 与带 libass `subtitles` 滤镜的 ffmpeg/ffprobe（macOS `brew install ffmpeg`，Debian/Ubuntu `sudo apt install ffmpeg`）。视频解说另用 `MIMO_API_KEY`（Fish Audio TTS 另需 `FISH_API_KEY`）。
 
+插件按 `python3` → `python` 的顺序挑第一个满足 3.10 的解释器。要固定用某个解释器，把 `OH_STORY_PYTHON` 设成它的绝对路径——设了就优先，即使探测失败也如实报错，而不会悄悄改用别的解释器。
+
 </details>
 
 <details>
 <summary>公众号工作台的宿主机依赖</summary>
 
 资料扫描与检索只用 Python 3.10+ 标准库；排版、字卡与发布另需安装 `packages/knowledge/wechat/skills/wechat-article/scripts/requirements.txt`。生图可以复用已打包的图片 provider adapter（需配置 `OPENAI_API_KEY`），或使用当前 Preset 里可见的图片工具；没有生图能力时会保留提示词并明确待生成状态。
+
+插件按 `python3` → `python` 的顺序挑第一个满足 3.10 的解释器。要固定用某个解释器，把 `OH_STORY_PYTHON` 设成它的绝对路径。
 
 </details>
 

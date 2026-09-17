@@ -5,7 +5,7 @@
 <h1 align="center">Oh Story DSH</h1>
 
 <p align="center">
-  <b>A novel, short-drama, interactive-game and video-recap creation workbench for DeepSeek Harness.</b>
+  <b>A novel, short-drama, interactive-game, video-recap and WeChat-article creation workbench for DeepSeek Harness.</b>
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://github.com/zenstory-ai/oh-story-dsh/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/zenstory-ai/oh-story-dsh?style=flat-square&color=22D3EE&logo=github&logoColor=white&label=Stars"></a>
   <a href="https://github.com/zenstory-ai/oh-story-dsh/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/zenstory-ai/oh-story-dsh?style=flat-square&color=081431&label=Release"></a>
-  <img alt="Workbenches 4" src="https://img.shields.io/badge/Workbenches-4-081431?style=flat-square">
+  <img alt="Workbenches 5" src="https://img.shields.io/badge/Workbenches-5-081431?style=flat-square">
   <a href="./LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/License-MIT-1F6FEB?style=flat-square"></a>
 </p>
 
@@ -31,12 +31,13 @@
 
 ![Novel workbench](docs/images/story-workbench-demo.gif)
 
-`oh-story-dsh` is a community plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH), independent of DeepSeek. It brings four creation pipelines — novels, short drama, interactive games and video recaps — into DSH: DSH manages agents, sessions, models, permissions and Chat; the plugin provides the creation Skills, professional Roles, project contracts and a workbench for each pipeline.
+`oh-story-dsh` is a community plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH), independent of DeepSeek. It brings five creation pipelines — novels, short drama, interactive games, video recaps and WeChat Official Account articles — into DSH: DSH manages agents, sessions, models, permissions and Chat; the plugin provides the creation Skills, professional Roles, project contracts and a workbench for each pipeline.
 
 - **Novel**: file tree, editor and Chat in three panes; 13 Oh Story Skills and 7 professional Roles ship with the plugin.
 - **Short drama**: per-episode screenplay, visual bible, storyboard, image and video prompts; the Production view projects them into shot and asset boards, and `/short-drama-edit` assembles the final cut.
 - **Game**: `/novel-to-game quick` produces a playable build, with live playtest on the left and Chat on the right.
 - **Video recap**: turn a local video into a Chinese narrated recap or a dubbed translation, previewing source, rough cut and final in place.
+- **WeChat article**: organise articles, style models and rendered output under `公众号/<account>/`; `/wechat-article` builds the corpus, writes, illustrates and publishes to the drafts box.
 
 ## Installation
 
@@ -70,6 +71,17 @@ DSH's `plugin add` needs pnpm internally; the `--package pnpm@11.7.0` in the com
 
 The video workbench pipeline additionally needs Python 3.10+ and ffmpeg/ffprobe built with the libass `subtitles` filter on the host (macOS `brew install ffmpeg`, Debian/Ubuntu `sudo apt install ffmpeg`). Video recaps use `MIMO_API_KEY` (and `FISH_API_KEY` for Fish Audio TTS).
 
+The plugin picks the first interpreter meeting the 3.10 floor, trying `python3` then `python`. To pin one, set `OH_STORY_PYTHON` to its absolute path — a pinned interpreter wins outright, and if it cannot be probed that is reported honestly instead of silently running a different one.
+
+</details>
+
+<details>
+<summary>Host dependencies for the WeChat workbench</summary>
+
+Corpus scanning and retrieval use only the Python 3.10+ standard library; rendering, text cards and publishing additionally need `packages/knowledge/wechat/skills/wechat-article/scripts/requirements.txt`. Image generation can reuse the bundled image-provider adapter (configure `OPENAI_API_KEY`) or any image tool visible in the current Preset; without one, prompts are kept and the article stays explicitly pending generation.
+
+The plugin picks the first interpreter meeting the 3.10 floor, trying `python3` then `python`. To pin one, set `OH_STORY_PYTHON` to its absolute path.
+
 </details>
 
 <details>
@@ -94,11 +106,17 @@ Configure only what you use: without a video key you can still write storyboards
 
 </details>
 
+## Windows desktop edition
+
+A Tauri 2 desktop entry ships the same five workbenches — novel, short drama, game, video and WeChat — and bundles Node.js 24, DSH and this plugin. It starts a local DSH automatically, stays in the system tray, and keeps sessions, configuration and drafts in its own data directory.
+
+Start from source with `pnpm desktop`, build the full portable bundle with `pnpm desktop:portable`, and build the installer with `pnpm desktop:build`. Building needs Windows x64, Node.js 24, Rust, Visual Studio C++ Build Tools and WebView2. The portable build must keep the `runtime` directory next to the EXE; model credentials, Python and ffmpeg are still configured separately. Unsaved drafts that already exist in the browser are not migrated automatically — save them to project files first. See the [desktop notes](docs/DESKTOP.md) for startup, data locations, packaging and tests.
+
 ## Start creating
 
-On first entry you will see the DSH home page. Click **＋ (Add workspace)** next to Workspaces on the left, choose the folder that holds your work, then select that directory under **Choose workspace** below; DSH opens an empty session. You can also open an existing session from the left. When the directory already contains creation projects, four workbench tabs appear: Novel / Short drama / Game / Video.
+On first entry you will see the DSH home page. Click **＋ (Add workspace)** next to Workspaces on the left, choose the folder that holds your work, then select that directory under **Choose workspace** below; DSH opens an empty session. You can also open an existing session from the left. When the directory already contains creation projects, five workbench tabs appear: Novel / Short drama / Game / Video / WeChat.
 
-An empty directory keeps the native DSH Chat. Once a model is configured, type `/story`, `/short-drama`, `/novel-to-game quick` or `/video-recap` to start; the workbench appears automatically after the agent writes its first creation file. Browsing existing work does not require an API key. A collapsed workbench can be reopened with the "creation workbench" button in the session area.
+An empty directory keeps the native DSH Chat. Once a model is configured, type `/story`, `/short-drama`, `/novel-to-game quick`, `/video-recap` or `/wechat-article` to start; the workbench appears automatically after the agent writes its first creation file. Browsing existing work does not require an API key. A collapsed workbench can be reopened with the "creation workbench" button in the session area.
 
 The requests below are ready to copy, tweak and send — replace the bracketed details first.
 
@@ -121,7 +139,7 @@ After choosing a direction, explicitly request an import or planning pass using 
 
 - **Install reports `pnpm not found on PATH`**: rerun the full install command above that includes `--package pnpm@11.7.0`, confirm it succeeds, then start.
 - **Browser did not open or asks for authentication**: open the full link with `?token=...` printed in the terminal; if the port is taken, use `web --port 3081` and open the newly printed link.
-- **No four creation tabs**: add a work directory and open a session first. In an empty directory, run a creation command in Chat; the workbench appears once creation files exist. A collapsed workbench can be restored with the "creation workbench" button in the session area. If existing work still does not show, check that install and start used the same profile, restart DSH and refresh the page.
+- **No five creation tabs**: add a work directory and open a session first. In an empty directory, run a creation command in Chat; the workbench appears once creation files exist. A collapsed workbench can be restored with the "creation workbench" button in the session area. If existing work still does not show, check that install and start used the same profile, restart DSH and refresh the page. The WeChat workbench defaults to a workspace containing a `公众号/` subdirectory.
 - **A standalone `story` profile has no web service**: add `@deepseek-ai/dsh-web-app` as described under "Load on demand" below; a new profile needs the Web UI added separately.
 
 ## Novel workbench
@@ -146,6 +164,24 @@ Two columns: live playtest on the left, DSH Chat on the right. Output from `/nov
 
 Preview on the left, Chat on the right. Projects live in `video-recaps/<project>/`: source footage in `sources/`, upstream working files in `work/`, deliverables in `outputs/`. The workbench switches between source / rough cut / final, shows stage hints, a run checklist and QC artifacts, and streams video over HTTP Range.
 
+## WeChat workbench
+
+Both the home page and the session workbench offer a dedicated "WeChat" entry, organising articles, style files and rendered output under `公众号/<account>/`. Markdown/HTML source editing, phone and desktop previews, local illustrations, version-checked saving and unsaved-draft recovery are supported; reference originals under `参考文章/` are read-only, previews disable scripts and external resources, and nothing is uploaded or published automatically.
+
+The project-maintained `/wechat-article` reads and analyses the whole reference corpus first, building an article index, topic groups and global plus image-article style models; it then writes from "new topic + saved style model" without re-reading the originals. Image-type accounts additionally analyse the text inside images, the visuals, the text-image relationship and multi-image structure — OCR only helps read characters, and the default is to generate real image bodies. Per-account directories, incremental corpus audits, resumable runs, cover and body illustrations, programmatic text cards and WeChat HTML layout are all supported. Building the corpus uses every reference article for that account across a full year, with representative samples used for deeper validation; incremental analysis runs only when new material arrives or the style must change. When real body images are missing or image-article review is incomplete the article stays pending generation or review — a text draft plus prompts does not count as a finished image article.
+
+```text
+/wechat-article 分析这个参考文章目录，为“职场号”建立风格库
+/wechat-article 新选题：领导突然不再安排重要工作，写完整正文
+/wechat-article 给这篇文章配封面和必要插图，再导出本地图文
+/wechat-article 将本周审核完成的文章上传到职场号、生活号各自的草稿箱
+/wechat-article 按发布计划公开发布职场号文章，群发生活号文章，并查询结果
+```
+
+Use it through the existing DSH Chat. Account registration, publication preparation, cover and body image upload, draft creation and update, preview to a named recipient, public publish, broadcast by tag or to everyone, status queries and receipt recovery are built in. Public publishing and broadcasting are handled separately, and a submitted job is never treated as completed. Batches can carry an earliest publication time with a timezone; unattended runs need a real scheduler wired up. WeChat account configuration stores only the AppID and the names of the key environment variables, and each account's assets, drafts and receipts are isolated; live calls still need WeChat API permissions and an IP allowlist. Configuration and commands are in the [publishing notes](packages/knowledge/wechat/skills/wechat-article/references/publishing.md).
+
+Six reference projects are registered at pinned versions; MIT/Apache reference resources and themes are redistributed under their licences, while AGPL/restricted projects have their functionality reimplemented here — see the [integration notes](packages/knowledge/wechat/skills/wechat-article/references/integrated-references.md). Method provenance, the mapping to the 17-section brief and the deliberate adaptations are in the [sources notes](packages/knowledge/wechat/skills/wechat-article/references/sources.md).
+
 ## Core experience
 
 - **Live file follow**: when the agent calls the official file tools, the target file is located automatically and the editor shows the content as it is generated.
@@ -155,7 +191,7 @@ Preview on the left, Chat on the right. Projects live in `video-recaps/<project>
 - **Real generation contracts**: optional built-in GPT Image 2, Seedance and MiniMax Music adapters; accounts, models, credentials and availability are decided by the DSH runtime and configuration outside the project.
 - **Safe editing**: source editing with quick save; unsaved manual edits are never overwritten by a concurrent agent.
 - **Stable long conversations**: the message area scrolls independently and the official Composer stays pinned to the bottom of the Chat pane.
-- **Stays out of other scenarios**: the workbench only takes over the session layout when the current workspace contains a novel, short-drama, game or video project. It can be collapsed at any time, returning the session to native DSH; the choice is remembered per workspace.
+- **Stays out of other scenarios**: the workbench only takes over the session layout when the current workspace contains a novel, short-drama, game, video or WeChat project. It can be collapsed at any time, returning the session to native DSH; the choice is remembered per workspace.
 
 The capability boundaries and protocol constraints of each workbench are described in the [architecture notes](docs/ARCHITECTURE.md).
 
@@ -167,6 +203,7 @@ The capability boundaries and protocol constraints of each workbench are describ
 | Short drama | [Drama Skills 0.7.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.0) · 11 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
 | Game | [NovelToGame 0.3.1](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 sample | `/novel-to-game quick`, `/game-build`, `/game-qa` |
 | Video | [video-recap-skills 0.5.0](https://github.com/zenstory-ai/video-recap-skills) · 6 Skills | `/video-recap`, `/video-script` |
+| WeChat | Built by this project · 1 Skill · 6 registered reference projects | `/wechat-article` |
 
 ## Load on demand
 
@@ -209,6 +246,8 @@ The two profiles can run at the same time on different ports. Models, credential
 
 **The storyboard or game design is written — where do the film and the playable build come from?** The short-drama final cut is rendered by `/short-drama-edit` from `剪辑单.md` and needs the media-generation APIs configured first; the game build is produced by `/game-build` and appears in the game workbench's project list once ready.
 
+**Will WeChat articles be published automatically?** No. Draft creation, public publishing and broadcasting are three separate actions, and a submitted job is never treated as completed; live calls also need WeChat API permissions and an IP allowlist. An article missing images or image-article review stops at pending generation or pending review.
+
 ## Further reading
 
 - [Writing fiction with DeepSeek](https://zenstory.ai/dsh/deepseek-novel-writing): choose the writing folder, configure the host's model, then specify genre, viewpoint and this turn's stopping point.
@@ -217,6 +256,8 @@ The two profiles can run at the same time on different ports. Models, credential
 - [Meaningful game choices](https://zenstory.ai/novel-to-game/meaningful-choices): connect action costs, visible changes and later consequences.
 - [Original sound versus narration](https://zenstory.ai/video-recap/original-audio-and-narration): identify essential dialogue, picture evidence and gaps that need explanation.
 - [Writing-environment comparison](https://zenstory.ai/compare/writing-workflows): when plain chat, the DSH plugin or the hosted workbench fits.
+- [Building the WeChat corpus and writing](packages/knowledge/wechat/skills/wechat-article/references/workflow-control.md): the controlled contract, task locking and how style models are accepted.
+- [WeChat publishing flow](packages/knowledge/wechat/skills/wechat-article/references/publishing.md): account configuration, drafts box, preview, publish and broadcast.
 
 ## Acknowledgements
 
@@ -235,5 +276,5 @@ oh-story-dsh is maintained by [ZenStory AI](https://zenstory.ai) — open-source
 | [drama-skills](https://github.com/zenstory-ai/drama-skills) | AI short-drama / motion-comic suite: scripts, assets, storyboards, image & video prompts, review |
 | [novel-to-game](https://github.com/zenstory-ai/novel-to-game) | Agent skills for source-grounded novel adaptation, target-runtime builds, and evidence-based QA |
 | [video-recap-skills](https://github.com/zenstory-ai/video-recap-skills) | Create Chinese-narration recaps from supported video files, with optional editable JianYing/CapCut draft export |
-| [oh-story-dsh](https://github.com/zenstory-ai/oh-story-dsh) | Community DeepSeek Harness plugin with novel, short-drama, game and video-recap workbenches (this repo) |
+| [oh-story-dsh](https://github.com/zenstory-ai/oh-story-dsh) | Community DeepSeek Harness plugin with novel, short-drama, game, video-recap and WeChat-article workbenches (this repo) |
 | [zenstory](https://github.com/zenstory-ai/zenstory) | Chat-to-create AI novel-writing workbench ([app.zenstory.ai](https://app.zenstory.ai)) |
