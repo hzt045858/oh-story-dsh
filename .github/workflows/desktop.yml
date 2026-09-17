@@ -2,6 +2,12 @@ name: Windows Desktop
 
 on:
   workflow_dispatch:
+  # The desktop app carries its own version line and its own tag namespace. `v*` belongs to the
+  # plugin tarball (`release.yml` asserts the tag matches `packages/dsh-plugin`), so a desktop
+  # release uses `desktop-v*`. Neither prefix matches the other, so the two workflows never
+  # race for the same tag.
+  push:
+    tags: ["desktop-v*"]
   pull_request:
     paths:
       - "apps/desktop/**"
@@ -15,6 +21,11 @@ jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 45
+    # Publishing a release needs write, but the `pull_request` trigger above must stay read-only,
+    # so the grant is scoped to this job. Every publishing step is additionally gated on a tag
+    # ref, which a pull request never has.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -25,6 +36,19 @@ jobs:
           node-version: 24
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
+      # Check the tag before the Rust build rather than after it: a mismatched tag should fail in
+      # seconds, not after 40 minutes of compiling.
+      - name: Verify the tag matches the desktop app version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          APP_VERSION="$(node -p "require('./apps/desktop/package.json').version")"
+          test "$RELEASE_TAG" = "desktop-v$APP_VERSION" || {
+            echo "Tag $RELEASE_TAG does not match apps/desktop@$APP_VERSION; expected desktop-v$APP_VERSION" >&2
+            exit 1
+          }
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:desktop
       - run: pnpm desktop:prepare
@@ -34,10 +58,69 @@ jobs:
       - run: pnpm test:desktop:native
       - run: pnpm test:desktop:native --skip-build --models-only
       - run: pnpm desktop:portable
+      # `package-desktop.ts` writes a folder, and a release asset has to be a file, so zip it here,
+      # where it is already on disk. Three details are deliberate:
+      #
+      # * `tar` rather than `Compress-Archive`. Windows PowerShell's `Compress-Archive` stores entry
+      #   names with backslash separators, which the ZIP spec forbids ("All slashes MUST be forward
+      #   slashes"). Readers that take the spec literally — Python's `zipfile`, macOS/Linux `unzip` —
+      #   then extract one flat file per entry, with a literal backslash in each name, instead of the
+      #   folder tree this project documents.
+      # * the full path to `System32\tar.exe`. A bare `tar` may resolve to Git for Windows' GNU tar,
+      #   which cannot write zip at all. `tar.exe` is a standalone binary, so its behaviour is the
+      #   same whichever shell invokes it — only the argv has to arrive intact.
+      # * `zip:hdrcharset=UTF-8`. Without it libarchive stores non-ASCII entry names in the local
+      #   ANSI code page and leaves the UTF-8 flag clear, so the bundled Chinese-named reference
+      #   files become mojibake for any reader not on that locale.
+      #
+      # No trailing `/*`: archiving the folder itself keeps that folder inside the archive, so
+      # unzipping yields `Oh-Story-<version>-windows-x64/Oh Story.exe` exactly as the portable
+      # layout is documented. Archiving `"$folder/*"` instead would scatter the executable and its
+      # `runtime` directory straight into whatever directory the user unzips in.
+      - name: Zip the portable build for the release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/package.json -Raw | ConvertFrom-Json).version
+          $folder = "release/Oh-Story-$version-windows-x64"
+          if (-not (Test-Path $folder)) { throw "portable folder $folder was not produced" }
+          $zip = "release/Oh-Story-$version-windows-x64.zip"
+          $tar = Join-Path $env:SystemRoot "System32/tar.exe"
+          & $tar --format=zip --options 'zip:hdrcharset=UTF-8' -cf $zip -C release "Oh-Story-$version-windows-x64"
+          if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path $zip) -or (Get-Item $zip).Length -eq 0) { throw "zip $zip was not produced" }
       - uses: actions/upload-artifact@v7
         with:
           name: Oh-Story-windows-x64
           path: release/Oh-Story-*-windows-x64/
+      # An artifact expires and needs a GitHub account to download; this is the link a release note
+      # can actually point at. Same create-or-update shape as `release.yml`.
+      - name: Create or update the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APP_VERSION="$(node -p "require('./apps/desktop/package.json').version")"
+          ZIP="release/Oh-Story-$APP_VERSION-windows-x64.zip"
+          test -f "$ZIP" || { echo "missing release asset $ZIP" >&2; exit 1; }
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$ZIP" --clobber
+          else
+            # `--latest=false`: the plugin tarball is the primary distribution line, and `release.yml`
+            # never passes `--latest`, so it always claims the Latest slot. Without this flag a
+            # desktop tag pushed after a plugin tag would take that slot, and `/releases/latest`
+            # would hand out a zip that contains no `oh-story-dsh-*.tgz`.
+            #
+            # The title drops the `desktop-` prefix for the same reason the plugin release title
+            # reads `oh-story-dsh v0.1.9`: the tag carries the namespace, the title should not
+            # repeat it.
+            gh release create "$GITHUB_REF_NAME" "$ZIP" \
+              --verify-tag \
+              --latest=false \
+              --generate-notes \
+              --title "Oh Story Desktop v$APP_VERSION"
+          fi
       - uses: actions/upload-artifact@v7
         if: always()
         with:

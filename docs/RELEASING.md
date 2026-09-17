@@ -60,6 +60,40 @@ The version in `package.json` must still be bumped for every fork release: the
 tag/version match check in step 3 fails on a reused version, and GitHub Releases
 reject duplicate tag names.
 
+### Windows desktop
+
+`apps/desktop` is fork-only and carries its own version in
+`apps/desktop/package.json`, so it releases under its own tag namespace.
+Pushing `desktop-v<app-version>` runs the desktop workflow, which repeats the
+isolated native tests, builds the portable folder and attaches it to a GitHub
+Release:
+
+```bash
+git tag desktop-v0.1.8
+git push origin desktop-v0.1.8
+```
+
+The tag must match `apps/desktop/package.json`. The workflow checks it before
+the Rust build starts, so a mismatch costs seconds rather than 40 minutes.
+
+The desktop release is created with `--latest=false`, so the plugin tarball
+keeps the `Latest` slot on the Releases page no matter which tag is pushed
+first. The zip is still listed under its own tag.
+
+The asset is `Oh-Story-<app-version>-windows-x64.zip`, which unzips to the
+`Oh-Story-<app-version>-windows-x64` folder documented under **Run** in
+`docs/DESKTOP.md`. The zip keeps that folder layer, so the executable and its
+`runtime` directory never land loose in whatever directory the user unzips in.
+
+`v*` stays reserved for the plugin tarball described above. The two prefixes do
+not match each other, so neither workflow triggers on the other's tags and the
+two never race to create the same release.
+
+Only the portable build is published. The NSIS installer is not, because
+shipping an unsigned installer invites users to install it as though it had
+been verified. `docs/DESKTOP.md` covers the build, the portable layout and the
+runtime patches.
+
 ## Verify the public installation
 
 Do not announce a release until the registry reports the exact version:

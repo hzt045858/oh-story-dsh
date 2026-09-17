@@ -103,6 +103,19 @@ The model selector also clears a session's saved reasoning level when that
 level is removed or reasoning capabilities are disabled. This correction uses
 the existing session selection API so subsequent requests use a supported default.
 
+## Releases
+
+Published desktop builds are portable zips attached to the Releases page, named
+`Oh-Story-<app-version>-windows-x64.zip`. Unzip one and open `Oh Story.exe`
+inside the resulting `Oh-Story-<app-version>-windows-x64` folder, keeping the
+`runtime` directory beside the executable as described under **Run**.
+
+No certificate or automatic update service is configured, so published builds
+are unsigned and Windows SmartScreen may warn on first launch. No installer is
+published; run the portable build.
+
+Maintainers publishing a build: the tag rules are in `docs/RELEASING.md`.
+
 ## Verification
 
 ```powershell
@@ -138,5 +151,5 @@ local DSH origin. External HTTP/HTTPS links open in the system browser. DSH
 continues to own authentication and API authorization.
 
 The Windows Desktop GitHub Actions workflow runs the isolated native tests and
-uploads a portable build. It can also be started manually. An artifact upload is
-not a public release or a signed installer.
+uploads a portable build as a CI artifact. It can also be started manually. That
+artifact is CI evidence rather than a release.
