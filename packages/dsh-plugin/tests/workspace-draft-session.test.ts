@@ -65,7 +65,7 @@ function fixture(options: FixtureOptions = {}) {
     if (options.lookup === "reject") throw new Error("Session lookup failed");
     return options.agent === "missing" ? undefined : agent;
   });
-  const ensureMaterialized = vi.fn<(value: unknown) => Promise<void>>().mockResolvedValue(undefined);
+  const flush = vi.fn<(value: unknown) => Promise<boolean>>().mockResolvedValue(true);
   const logError = vi.fn();
   const registrations: RegisteredRoute[] = [];
   const context = {
@@ -80,8 +80,8 @@ function fixture(options: FixtureOptions = {}) {
       lookups: new Map(options.lookup === "missing" ? [] : [["agent", { resolve: resolveAgent }]])
     },
     get: (name: string): unknown => {
-      if (name !== "sessionPersistence" || options.persistence === "missing") return undefined;
-      return options.persistence === "unsupported" ? {} : { ensureMaterialized };
+      if (name !== "sessions" || options.persistence === "missing") return undefined;
+      return options.persistence === "unsupported" ? {} : { flush };
     },
     logger: () => ({ error: logError })
   } as unknown as Context;
@@ -90,7 +90,7 @@ function fixture(options: FixtureOptions = {}) {
   const registered = registrations[0];
   if (registered === undefined) throw new Error("Workspace route was not registered");
   expect(registered).toMatchObject({ kind: "prefix", path: "/oh-story" });
-  return { handler: registered.handler, session, ensureMaterialized, resolveAgent, fs, sandboxPolicy, logError };
+  return { handler: registered.handler, session, flush, resolveAgent, fs, sandboxPolicy, logError };
 }
 
 interface RunningRoute {
@@ -167,8 +167,8 @@ describe("workspace draft Session persistence route", () => {
       expect(response.headers.get("cache-control")).toBe("no-store");
     });
     expect(subject.resolveAgent).toHaveBeenCalledWith(SESSION_ID);
-    expect(subject.ensureMaterialized).toHaveBeenCalledExactlyOnceWith(subject.session);
-    expect(subject.ensureMaterialized.mock.calls[0]?.[0]).toBe(subject.session);
+    expect(subject.flush).toHaveBeenCalledExactlyOnceWith(subject.session);
+    expect(subject.flush.mock.calls[0]?.[0]).toBe(subject.session);
     expect(Object.keys(subject.session)).toEqual(["id", "header"]);
     expect(subject.fs.resolve).toHaveBeenCalledWith(WORKSPACE);
     expect(subject.fs.stat).not.toHaveBeenCalled();
@@ -179,9 +179,10 @@ describe("workspace draft Session persistence route", () => {
     const subject = fixture();
     const entered = deferred();
     const durable = deferred();
-    subject.ensureMaterialized.mockImplementation(async () => {
+    subject.flush.mockImplementation(async () => {
       entered.release();
       await durable.promise;
+      return true;
     });
     await withRoute(subject, async ({ request, responses }) => {
       const pending = request();
@@ -204,8 +205,8 @@ describe("workspace draft Session persistence route", () => {
         expect(await response.json()).toEqual({ sessionId: SESSION_ID });
       }
     });
-    expect(subject.ensureMaterialized).toHaveBeenCalledTimes(2);
-    expect(subject.ensureMaterialized.mock.calls.every(([value]) => value === subject.session)).toBe(true);
+    expect(subject.flush).toHaveBeenCalledTimes(2);
+    expect(subject.flush.mock.calls.every(([value]) => value === subject.session)).toBe(true);
   });
 
   it("allows Session metadata retention in a read-only workspace", async () => {
@@ -215,7 +216,7 @@ describe("workspace draft Session persistence route", () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ sessionId: SESSION_ID });
     });
-    expect(subject.ensureMaterialized).toHaveBeenCalledExactlyOnceWith(subject.session);
+    expect(subject.flush).toHaveBeenCalledExactlyOnceWith(subject.session);
   });
 
   it.each([
@@ -240,7 +241,7 @@ describe("workspace draft Session persistence route", () => {
         expect(response.status).toBe(status);
         expect(await response.json()).toEqual({ error: expect.any(String) });
       });
-      expect(subject.ensureMaterialized).not.toHaveBeenCalled();
+      expect(subject.flush).not.toHaveBeenCalled();
     }
   );
 
@@ -256,13 +257,13 @@ describe("workspace draft Session persistence route", () => {
       expect(await response.json()).toEqual({ error: expect.any(String) });
     });
     expect(subject.resolveAgent).not.toHaveBeenCalled();
-    expect(subject.ensureMaterialized).not.toHaveBeenCalled();
+    expect(subject.flush).not.toHaveBeenCalled();
   });
 
   it("reports persistence failure and permits a later successful retry", async () => {
     const subject = fixture();
     const failure = new Error("Session disk write failed");
-    subject.ensureMaterialized.mockRejectedValueOnce(failure);
+    subject.flush.mockRejectedValueOnce(failure);
     await withRoute(subject, async ({ request }) => {
       const failed = await request();
       expect(failed.status).toBe(500);
@@ -271,7 +272,7 @@ describe("workspace draft Session persistence route", () => {
       expect(retried.status).toBe(200);
       expect(await retried.json()).toEqual({ sessionId: SESSION_ID });
     });
-    expect(subject.ensureMaterialized).toHaveBeenCalledTimes(2);
+    expect(subject.flush).toHaveBeenCalledTimes(2);
     expect(subject.logError).toHaveBeenCalledWith("workspace route failed", failure);
   });
 
@@ -283,7 +284,7 @@ describe("workspace draft Session persistence route", () => {
       expect(await response.json()).toEqual({ error: expect.any(String) });
     });
     expect(subject.resolveAgent).not.toHaveBeenCalled();
-    expect(subject.ensureMaterialized).not.toHaveBeenCalled();
+    expect(subject.flush).not.toHaveBeenCalled();
   });
 
   it("keeps ordinary workspace discovery free of Session persistence", async () => {
@@ -293,6 +294,6 @@ describe("workspace draft Session persistence route", () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ cwd: WORKSPACE, files: [], mode: "dsh-session" });
     });
-    expect(subject.ensureMaterialized).not.toHaveBeenCalled();
+    expect(subject.flush).not.toHaveBeenCalled();
   });
 });

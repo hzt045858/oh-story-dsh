@@ -740,12 +740,16 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
     }
     if (url.pathname === "/oh-story/draft-session" && request.method === "POST") {
       const realm = await workspaceRealm(context, url);
-      const persistence = context.get("sessionPersistence");
-      if (persistence === undefined || typeof persistence.ensureMaterialized !== "function") {
+      const sessions = context.get("sessions");
+      if (sessions === undefined || typeof sessions.flush !== "function") {
         throw new WorkspaceHttpError(503, "DSH 会话持久化当前不可用。");
       }
       // A browser draft must keep its empty Session resumable without creating a chat event.
-      await persistence.ensureMaterialized(realm.agent.session);
+      // DSH owns the durability entry point: `SessionStore.flush` dispatches the awaited
+      // `session/flush` checkpoint for one exact live Session, draining its buffered events
+      // and materializing its header. Consumers that flush before reading storage must come
+      // through here rather than reaching into the persistence backend themselves.
+      await sessions.flush(realm.agent.session);
       send(response, 200, { sessionId: realm.agent.session.id });
       return;
     }

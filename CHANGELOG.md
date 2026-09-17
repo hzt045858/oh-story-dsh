@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 草稿会话的持久化改走 DSH 0.1.5-rc.1 的 `SessionStore.flush`。`SessionPersistence.ensureMaterialized` 在 0.1.5-rc.1 已被移除：持久化后端改成按 Session ID 寻址的句柄模型（`create` / `open` 返回 `SessionHandle`，物化由句柄或服务级 `flush` 触发），服务不再持有活动 Session 的注册表，原先按 Session 对象调用的方法因此不存在。`POST /oh-story/draft-session` 现在改为调用 `ctx.sessions.flush(session)`——DSH 文档把它定为唯一的 durability 入口，并要求「在读取存储前先自行 flush」的消费者都走这里；语义与原先一致：排空该条活动 Session 缓冲的事件、把 header 落盘，空会话由此变得可列举可恢复，且不产生任何 chat 事件。这是 [0.1.9] 中「插件源码不需要改动」的唯一例外——上游没有草稿会话功能，那句话只对上游成立。
+
 ## [0.1.9] - 2026-09-10
 
 ### Added
