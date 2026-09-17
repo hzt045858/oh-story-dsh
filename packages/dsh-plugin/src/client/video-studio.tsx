@@ -44,6 +44,11 @@ function preferredPreview(project: VideoProject): VideoPreviewAsset | undefined 
     ?? project.previews.find((item) => item.role === "source");
 }
 
+export function videoPreviewSelection(project: VideoProject, role: VideoPreviewAsset["role"] | undefined, accepted: VideoPreviewAsset | undefined) {
+  const selected = project.previews.find((item) => item.role === role) ?? preferredPreview(project);
+  return { selected, loaded: accepted ?? selected };
+}
+
 function readableBytes(bytes: number): string {
   if (bytes < 1_024 * 1_024) return `${(bytes / 1_024).toFixed(1)} KB`;
   if (bytes < 1_024 * 1_024 * 1_024) return `${(bytes / (1_024 * 1_024)).toFixed(1)} MB`;
@@ -56,7 +61,7 @@ function ActionIcon({ name }: { readonly name: "reload" | "fullscreen" | "extern
     fullscreen: <><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></>,
     external: <><path d="M14 3h7v7M21 3l-9 9"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></>
   };
-  return <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+  return <svg aria-hidden width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
 function preferredArtifact(project: VideoProject): VideoArtifactSummary | undefined {
@@ -64,6 +69,10 @@ function preferredArtifact(project: VideoProject): VideoArtifactSummary | undefi
     ?? project.artifacts.find((item) => item.path.endsWith("assembly_qc.json"))
     ?? project.artifacts.find((item) => item.kind === "quality")
     ?? project.artifacts.at(-1);
+}
+
+export function videoArtifactSelection(project: VideoProject, selected: string | undefined): VideoArtifactSummary | undefined {
+  return project.artifacts.find((item) => item.path === selected) ?? preferredArtifact(project);
 }
 
 function artifactKindLabel(kind: VideoArtifactSummary["kind"]): string {
@@ -74,21 +83,27 @@ function VideoPreview({ project, sessionId, running }: { readonly project: Video
   const shellRef = useRef<HTMLDivElement>(null);
   const initial = preferredPreview(project);
   const [role, setRole] = useState<VideoPreviewAsset["role"] | undefined>(initial?.role);
-  const selected = project.previews.find((item) => item.role === role) ?? preferredPreview(project);
-  const [loaded, setLoaded] = useState(initial);
+  const [accepted, setAccepted] = useState(initial);
+  const { selected, loaded } = videoPreviewSelection(project, role, accepted);
   const [revision, setRevision] = useState(0);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
-  if (selected === undefined || loaded === undefined) return <div className="oh-video-preview-empty">
+  useEffect(() => {
+    if (accepted !== undefined || loaded === undefined) return;
+    setAccepted(loaded);
+    setRole(loaded.role);
+  }, [accepted, loaded]);
+  if (loaded === undefined) return <div className="oh-video-preview-empty">
     <span aria-hidden>▶</span>
     <strong>还没有可预览的视频</strong>
     <p>把原片导入 <code>video-recaps/&lt;项目&gt;/sources/</code>，然后在右侧 Chat 使用 <code>/video-recap</code>。剪后片和最终成片会自动出现在这里。</p>
     <div className="oh-video-prompt-example"><span>描述示例</span><q>把这段视频做成 3 分钟中文解说，保留关键原声，字幕烧进画面。</q></div>
   </div>;
-  const pending = selected.path !== loaded.path || selected.version !== loaded.version;
+  const pending = selected !== undefined && (selected.path !== loaded.path || selected.version !== loaded.version);
+  const selectedRole = selected?.role ?? loaded.role;
   const load = (asset: VideoPreviewAsset): void => {
     setRole(asset.role);
-    setLoaded(asset);
+    setAccepted(asset);
     setReady(false);
     setError(false);
     setRevision((value) => value + 1);
@@ -105,9 +120,9 @@ function VideoPreview({ project, sessionId, running }: { readonly project: Video
           type="button"
           role="tab"
           key={asset.role}
-          aria-selected={asset.role === selected.role}
-          tabIndex={asset.role === selected.role ? 0 : -1}
-          onKeyDown={(event) => { handleTabKey(event, project.previews.map((item) => item.role), selected.role, (next) => {
+          aria-selected={asset.role === selectedRole}
+          tabIndex={asset.role === selectedRole ? 0 : -1}
+          onKeyDown={(event) => { handleTabKey(event, project.previews.map((item) => item.role), selectedRole, (next) => {
             const asset = project.previews.find((item) => item.role === next);
             if (asset !== undefined) load(asset);
           }); }}
@@ -116,7 +131,7 @@ function VideoPreview({ project, sessionId, running }: { readonly project: Video
       </div>
       <span className="oh-video-runtime-state" role="status" aria-live="polite"><i aria-hidden /><em>{runtimeState}</em></span>
       <div className="oh-video-preview-actions">
-        {pending && <button type="button" onClick={() => { load(selected); }}>载入新版本</button>}
+        {pending && selected !== undefined && <button type="button" onClick={() => { load(selected); }}>载入新版本</button>}
         <button type="button" title="重新载入" aria-label="重新载入视频" onClick={() => { load(loaded); }}><ActionIcon name="reload" /></button>
         <button type="button" title="全屏" aria-label="全屏预览" onClick={() => { void shellRef.current?.requestFullscreen(); }}><ActionIcon name="fullscreen" /></button>
         <a href={mediaUrl} target="_blank" rel="noreferrer" title="在新窗口打开" aria-label="在新窗口打开视频"><ActionIcon name="external" /></a>
@@ -138,25 +153,45 @@ function VideoPreview({ project, sessionId, running }: { readonly project: Video
 
 function VideoArtifacts({ project, sessionId }: { readonly project: VideoProject; readonly sessionId: string }) {
   const [selected, setSelected] = useState(preferredArtifact(project)?.path);
+  const selectedArtifact = videoArtifactSelection(project, selected);
+  const path = selectedArtifact?.path;
+  const version = selectedArtifact?.version;
   const [content, setContent] = useState<string>();
   const [error, setError] = useState<string>();
-  const [preflight, setPreflight] = useState<VideoPreflight | "failed">();
-  useEffect(() => { setSelected(preferredArtifact(project)?.path); }, [project.id]);
+  const [attempt, setAttempt] = useState(0);
+  const [preflight, setPreflight] = useState<VideoPreflight | "loading" | "failed">();
+  const preflightRequest = useRef<AbortController>();
+  useEffect(() => { setSelected(path); }, [path]);
   useEffect(() => {
-    if (selected === undefined) { setContent(undefined); return; }
     const controller = new AbortController();
     setContent(undefined);
     setError(undefined);
-    void fetch(endpoint("file", sessionId, selected), { signal: controller.signal })
+    if (path === undefined) return;
+    void fetch(endpoint("file", sessionId, path), { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json() as FilePayload & { readonly error?: string };
+        if (controller.signal.aborted) return;
         if (!response.ok) throw new Error(payload.error ?? `HTTP ${String(response.status)}`);
         setContent(payload.content);
       })
       .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { controller.abort(); };
-  }, [selected, sessionId]);
-  const selectedArtifact = project.artifacts.find((item) => item.path === selected);
+  }, [attempt, path, sessionId, version]);
+  useEffect(() => () => { preflightRequest.current?.abort(); }, []);
+  const checkEnvironment = (): void => {
+    if (preflightRequest.current !== undefined) return;
+    const controller = new AbortController();
+    preflightRequest.current = controller;
+    setPreflight("loading");
+    void fetch(endpoint("video-preflight", sessionId), { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
+        const result = await response.json() as VideoPreflight;
+        if (!controller.signal.aborted) setPreflight(result);
+      })
+      .catch(() => { if (!controller.signal.aborted) setPreflight("failed"); })
+      .finally(() => { if (preflightRequest.current === controller) preflightRequest.current = undefined; });
+  };
   return <div className="oh-video-artifacts">
     <aside aria-label="视频项目产物">
       <div className="oh-video-artifacts-heading"><strong>项目产物</strong><span>{project.artifacts.length}</span></div>
@@ -170,19 +205,17 @@ function VideoArtifacts({ project, sessionId }: { readonly project: VideoProject
           {preflight.credentials.ttsProvider === "fish"
             && <span data-ready={preflight.credentials.fish || undefined}>Fish Key {preflight.credentials.fish ? "已配置" : "未配置"}</span>}
           <em>DSH Host 进程环境；Agent 执行世界以 <code>video-recap --doctor</code> 为准。</em>
-        </> : <button type="button" onClick={() => {
-          void fetch(endpoint("video-preflight", sessionId)).then(async (response) => {
-            if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
-            setPreflight(await response.json() as VideoPreflight);
-          }).catch(() => { setPreflight("failed"); });
-        }}>{preflight === "failed" ? "环境检查失败 · 重试" : "检查环境"}</button>}
+        </> : null}
+        <button type="button" disabled={preflight === "loading"} onClick={checkEnvironment}>
+          {preflight === "loading" ? "正在检查…" : preflight === "failed" ? "环境检查失败 · 重试" : typeof preflight === "object" ? "重新检查" : "检查环境"}
+        </button>
       </div>
       <nav>
         {project.artifacts.length === 0 && <p>流水线启动后，关键产物会出现在这里。</p>}
         {project.artifacts.map((artifact) => <button
           type="button"
           key={artifact.path}
-          aria-current={artifact.path === selected ? "page" : undefined}
+          aria-current={artifact.path === path ? "page" : undefined}
           onClick={() => { setSelected(artifact.path); }}
         ><span>{artifact.label}</span><small>{artifact.path.split("/").at(-1)}</small></button>)}
       </nav>
@@ -193,7 +226,7 @@ function VideoArtifacts({ project, sessionId }: { readonly project: VideoProject
         <em>{artifactKindLabel(selectedArtifact.kind)}</em>
       </header>}
       <div className="oh-video-artifact-content">{project.artifacts.length === 0 ? <div className="oh-video-artifacts-empty">故事方案、解说词、字幕和质检报告会按上游流水线写入这里。</div>
-        : error !== undefined ? <div className="oh-story-error">{error}</div>
+        : error !== undefined ? <div className="oh-story-error" role="alert">{error}<button className="oh-video-artifact-retry" type="button" title="重新载入产物" aria-label="重新载入产物" onClick={() => { setAttempt((value) => value + 1); }}><ActionIcon name="reload" /></button></div>
         : content === undefined ? <div className="oh-video-artifacts-empty">正在载入产物…</div>
           : <pre>{content}</pre>}</div>
     </section>
@@ -213,7 +246,8 @@ export function VideoStudio({
   onProject,
   onTab,
   onWorkbench,
-  onCollapse
+  onCollapse,
+  onRefresh
 }: {
   readonly sessionId: string;
   readonly projects: readonly VideoProject[];
@@ -228,6 +262,7 @@ export function VideoStudio({
   readonly onTab: (tab: "preview" | "artifacts") => void;
   readonly onWorkbench: (mode: WorkbenchMode) => void;
   readonly onCollapse: () => void;
+  readonly onRefresh: () => void;
 }) {
   const project = projects.find((item) => item.id === projectId) ?? projects[0];
   const tabsId = useId();
@@ -240,6 +275,7 @@ export function VideoStudio({
           type="button" role="tab" key={mode} aria-selected={mode === "video"} tabIndex={mode === "video" ? 0 : -1}
           onKeyDown={(event) => { handleTabKey(event, workbenches, "video", onWorkbench); }} onClick={() => { onWorkbench(mode); }}
         >{workbenchLabel(mode)}</button>)}</div>
+        <button className="oh-workbench-refresh" type="button" title="刷新项目文件" aria-label="刷新项目文件" onClick={onRefresh}><ActionIcon name="reload" /></button>
         <button className="oh-workbench-collapse" type="button" title="收起创作工作台" aria-label="收起创作工作台" onClick={onCollapse}>×</button>
       </div>
       <label className="oh-video-project"><span>视频项目</span><select aria-label="视频项目" value={project?.id ?? ""} disabled={project === undefined} onChange={(event) => { onProject(event.target.value); }}>
@@ -253,8 +289,8 @@ export function VideoStudio({
       >{item === "preview" ? "预览" : "产物"}</button>)}</div>
     </header>
     {project === undefined ? <div className="oh-video-preview-empty"><span aria-hidden>▶</span><strong>还没有视频项目</strong><p>在右侧 Chat 告诉 Agent 要处理的视频；项目会创建在 <code>video-recaps/&lt;项目&gt;/</code>。</p></div> : <div className="oh-video-panels">
-      <div role="tabpanel" id={`${tabsId}-preview-panel`} aria-labelledby={`${tabsId}-preview-tab`} hidden={tab !== "preview"}><VideoPreview key={project.id} project={project} sessionId={sessionId} running={running} /></div>
-      <div role="tabpanel" id={`${tabsId}-artifacts-panel`} aria-labelledby={`${tabsId}-artifacts-tab`} hidden={tab !== "artifacts"}><VideoArtifacts project={project} sessionId={sessionId} /></div>
+      <div role="tabpanel" id={`${tabsId}-preview-panel`} aria-labelledby={`${tabsId}-preview-tab`} hidden={tab !== "preview"}><VideoPreview key={`${sessionId}:${project.id}`} project={project} sessionId={sessionId} running={running} /></div>
+      <div role="tabpanel" id={`${tabsId}-artifacts-panel`} aria-labelledby={`${tabsId}-artifacts-tab`} hidden={tab !== "artifacts"}><VideoArtifacts key={`${sessionId}:${project.id}`} project={project} sessionId={sessionId} /></div>
     </div>}
   </main>;
 }
