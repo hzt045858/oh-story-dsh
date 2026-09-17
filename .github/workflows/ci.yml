@@ -108,4 +108,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install Chrome for the official DSH Web smoke
         run: pnpm exec playwright install --with-deps chrome
-      - run: pnpm test:dsh
+      # `pipefail` matters: without it the pipeline reports `tee`'s status and a failing smoke
+      # would still turn this step green.
+      - name: Run pnpm test:dsh
+        run: |
+          set -o pipefail
+          pnpm test:dsh 2>&1 | tee /tmp/test-dsh.log
+      # Same rationale as the other jobs: this run's log is not readable from outside the
+      # repository, and `pnpm test:dsh` is one aggregate command with no sub-stages to re-run,
+      # so the tail of its output is republished as an annotation instead.
+      - name: Report the smoke failure
+        if: failure()
+        shell: bash
+        run: |
+          message=$(tail -c 3000 /tmp/test-dsh.log | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=test:dsh::$message"
