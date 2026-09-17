@@ -35,6 +35,23 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r packages/knowledge/wechat/skills/wechat-article/scripts/requirements.txt
       - run: pnpm verify
+      # `pnpm verify` is an aggregate, and this job's log is not readable through the public
+      # API from outside the repository, so a red run used to say nothing but "exit code 1".
+      # Re-run the stages on failure and publish the first failing one as a check annotation,
+      # which stays readable without repository access. A stage that passes here was flaky.
+      - name: Report the failing stage
+        if: failure()
+        shell: bash
+        run: |
+          for stage in lint typecheck assets:check dsh:boundary test:unit build; do
+            if pnpm "$stage" > "/tmp/stage-$stage.log" 2>&1; then
+              echo "stage $stage passed on retry"
+              continue
+            fi
+            message=$(tail -c 3000 "/tmp/stage-$stage.log" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=stage $stage::$message"
+            exit 1
+          done
 
   portability:
     name: Portability (${{ matrix.os }})
@@ -59,6 +76,20 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r packages/knowledge/wechat/skills/wechat-article/scripts/requirements.txt
       - run: pnpm verify:portable
+      # Same rationale as the quality job: make the failing stage readable from a public run.
+      - name: Report the failing stage
+        if: failure()
+        shell: bash
+        run: |
+          for stage in typecheck assets:check test:unit build; do
+            if pnpm "$stage" > "/tmp/stage-$stage.log" 2>&1; then
+              echo "stage $stage passed on retry"
+              continue
+            fi
+            message=$(tail -c 3000 "/tmp/stage-$stage.log" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=stage $stage::$message"
+            exit 1
+          done
 
   native-dsh:
     name: Packaged DSH Web integration
