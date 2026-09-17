@@ -13,3 +13,14 @@ test-results/
 .omc/
 .omx/
 release/
+apps/desktop/runtime/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Python 字节码缓存（会让上游 assets 一致性校验误报）
+__pycache__/
+*.pyc
+
+# 本地工具状态，不属于项目内容
+.workbuddy-ai/
+docs/history-session/
