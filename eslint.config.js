@@ -14,8 +14,9 @@ export default tseslint.config(
       "apps/desktop/src-tauri/target/**",
       "apps/desktop/src-tauri/gen/**",
       "docs/blueprint/**",
-      "packages/knowledge/oh-story/**",
-      "packages/knowledge/novel-to-game/**",
+      // Bundled upstream knowledge is vendored verbatim and hashed by the parity
+      // checks, so it is never ours to restyle.
+      "packages/knowledge/**",
       "test-results/**",
       "release/**"
     ]
