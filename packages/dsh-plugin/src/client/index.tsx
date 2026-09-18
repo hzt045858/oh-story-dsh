@@ -601,7 +601,15 @@ function GameStudio({
     const studio = studioRef.current;
     if (studio === null) return;
     const publishWidth = () => {
-      studio.toggleAttribute("data-oh-game-narrow", studio.clientWidth <= 540);
+      // Below 620px the three-column toolbar no longer fits: the cluster's
+      // min-content (295px) plus the project column (160px), the tabs (122px),
+      // two 9px gaps and 24px of padding come to 619px. The grid then collapses
+      // the cluster to its `min-width: 0` while the cluster's buttons keep
+      // overflowing, and the overflowing collapse button lands under the game
+      // tabs or the project label. `medium` splits the scroller into a narrower
+      // studio than `wide` does, so this has to follow the studio width rather
+      // than the layout attribute.
+      studio.toggleAttribute("data-oh-game-narrow", studio.clientWidth <= 620);
     };
     publishWidth();
     const observer = new ResizeObserver(publishWidth);
