@@ -326,16 +326,25 @@ async function describeWorkbenchToolbar(page: Page): Promise<string> {
         await settleResponsiveLayout(page);
       }
       samples.push(await page.evaluate(() => {
-        const rect = (node: Element | null): { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null => {
+        // No named helpers in here: tsx compiles with esbuild's keepNames, which
+        // rewrites `const rect = (node) => …` into `__name(rect, "rect")`, and
+        // `__name` does not exist in the page context. Inline arrows are fine.
+        const selectors = [
+          ".oh-game-toolbar", ".oh-workbench-cluster", ".oh-game-mode-tabs",
+          ".oh-game-project", ".oh-game-tabs", ".oh-workbench-collapse",
+          ".oh-game-mobile-switcher"
+        ];
+        const boxes = selectors.map((selector) => {
+          const node = document.querySelector(selector);
           if (node === null) return null;
           const box = node.getBoundingClientRect();
           return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
-        };
+        });
         const scroller = document.querySelector("[data-conversation-scroll]");
         const studio = document.querySelector(".oh-game-studio");
         const collapse = document.querySelector(".oh-workbench-collapse");
-        const box = collapse?.getBoundingClientRect();
-        const hit = box === undefined ? null : document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        const collapseBox = collapse?.getBoundingClientRect();
+        const hit = collapseBox === undefined ? null : document.elementFromPoint(collapseBox.x + collapseBox.width / 2, collapseBox.y + collapseBox.height / 2);
         return {
           viewport: { width: innerWidth, height: innerHeight },
           layout: scroller?.getAttribute("data-oh-story-layout") ?? null,
@@ -343,12 +352,13 @@ async function describeWorkbenchToolbar(page: Page): Promise<string> {
           scrollerClientWidth: scroller instanceof HTMLElement ? scroller.clientWidth : null,
           studioClientWidth: studio instanceof HTMLElement ? studio.clientWidth : null,
           studioNarrow: studio?.hasAttribute("data-oh-game-narrow") ?? null,
-          toolbar: rect(document.querySelector(".oh-game-toolbar")),
-          cluster: rect(document.querySelector(".oh-workbench-cluster")),
-          modeTabs: rect(document.querySelector(".oh-game-mode-tabs")),
-          project: rect(document.querySelector(".oh-game-project")),
-          tabs: rect(document.querySelector(".oh-game-tabs")),
-          collapse: rect(collapse),
+          toolbar: boxes[0] ?? null,
+          cluster: boxes[1] ?? null,
+          modeTabs: boxes[2] ?? null,
+          project: boxes[3] ?? null,
+          tabs: boxes[4] ?? null,
+          collapse: boxes[5] ?? null,
+          switcher: boxes[6] ?? null,
           collapseHit: hit === null ? null : `${hit.tagName}.${typeof hit.className === "string" ? hit.className : ""}`.trim(),
           collapseReachable: hit !== null && hit === collapse
         };
