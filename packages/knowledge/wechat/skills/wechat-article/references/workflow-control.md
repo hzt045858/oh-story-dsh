@@ -80,6 +80,9 @@ Agent 实际审稿后写审核记录（格式见下文），检查项为 `full_c
   无对应主题模型时写 `transfer_reason`，只在模型边界内迁移，不假装有该主题专属经验。
 - 原创与事实：`originality` 至少两个不同的本题元素；`facts` 是数组。
   每项 `kind` 为 fact/inference/hypothetical，并有 claim/basis；事实另有可核对的 source/verified=true。
+  无法确认的具体数据、人名、书名、研究名称或事件细节不写进正文：按 V5.0 的事实策略改用模糊表达
+  （"有研究显示……"、"有一种说法是……"）或换一个角度，记为 `inference` 并写清 basis，**不得**记成 fact。
+  既核实不了又无法模糊化的断言删去，或明确写成个人判断。
   不需事实来源的原创假设场景应明确是示例，不能伪称真实经历或调查结果。
 - 篇幅：用户或账号规定长度时填写 `length_budget`，basis 为 body/image_text/outside_text，min/max 为去空白字符界限；
   正文计数不含首行 H1，保留 Markdown 源标记。计数口径与目标必须明确，不用图片文字量冒充外置正文长度。
