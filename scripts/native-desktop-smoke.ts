@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -531,7 +532,12 @@ async function main(): Promise<void> {
   }
   await access(executable);
   await mkdir(evidenceDirectory, { recursive: true });
-  const testDirectory = await mkdtemp(join(tmpdir(), "oh-story-desktop-smoke-"));
+  // `tmpdir()` can hand back a non-canonical path: on CI the runner's `TEMP` is the 8.3 short name
+  // (`C:\Users\RUNNER~1\...`), while the desktop host canonicalizes the workspace path it stores and
+  // returns (`runneradmin`). Comparing the two as strings fails, so canonicalize the fixture root
+  // once here and let every derived path inherit it. `realpathSync.native()` is required — plain
+  // `path.resolve()` does not expand 8.3 short names.
+  const testDirectory = realpathSync.native(await mkdtemp(join(tmpdir(), "oh-story-desktop-smoke-")));
   const dataDirectory = join(testDirectory, "app-data");
   const workspaceDirectory = join(testDirectory, "desktop-story-fixture");
   const port = await freePort();
