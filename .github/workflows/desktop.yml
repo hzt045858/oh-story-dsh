@@ -55,7 +55,17 @@ jobs:
       - run: pnpm --filter @oh-story/desktop test:models
       - run: pnpm --filter @oh-story/desktop test:navigation
       - run: cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
-      - run: pnpm test:desktop:native
+      - name: Run pnpm test:desktop:native
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm test:desktop:native 2>&1 | tee /tmp/test-desktop-native.log
+      - name: Report the desktop smoke failure
+        if: failure()
+        shell: bash
+        run: |
+          message=$(tail -c 3000 /tmp/test-desktop-native.log | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=test:desktop:native::$message"
       - run: pnpm test:desktop:native --skip-build --models-only
       - run: pnpm desktop:portable
       # `package-desktop.ts` writes a folder, and a release asset has to be a file, so zip it here,
