@@ -308,6 +308,59 @@ async function settleResponsiveLayout(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Explains why the collapse button could not be clicked. Playwright stops at the
+ * first covering element, so its message names a tab but not the layout that put
+ * the tab there; the measurement does. The width sweep matters because the host
+ * publishes `data-oh-story-layout` from a ResizeObserver and the game toolbar
+ * only overlaps at some widths, which is why this reproduces on a runner and not
+ * on a developer machine.
+ */
+async function describeWorkbenchToolbar(page: Page): Promise<string> {
+  const original = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  const samples: unknown[] = [];
+  try {
+    for (const width of [...new Set([original.width, 1024, 1280, 1440])]) {
+      if (width !== original.width) {
+        await page.setViewportSize({ width, height: original.height });
+        await settleResponsiveLayout(page);
+      }
+      samples.push(await page.evaluate(() => {
+        const rect = (node: Element | null): { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null => {
+          if (node === null) return null;
+          const box = node.getBoundingClientRect();
+          return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
+        };
+        const scroller = document.querySelector("[data-conversation-scroll]");
+        const studio = document.querySelector(".oh-game-studio");
+        const collapse = document.querySelector(".oh-workbench-collapse");
+        const box = collapse?.getBoundingClientRect();
+        const hit = box === undefined ? null : document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return {
+          viewport: { width: innerWidth, height: innerHeight },
+          layout: scroller?.getAttribute("data-oh-story-layout") ?? null,
+          studioPane: scroller?.getAttribute("data-oh-studio-pane") ?? null,
+          scrollerClientWidth: scroller instanceof HTMLElement ? scroller.clientWidth : null,
+          studioClientWidth: studio instanceof HTMLElement ? studio.clientWidth : null,
+          studioNarrow: studio?.hasAttribute("data-oh-game-narrow") ?? null,
+          toolbar: rect(document.querySelector(".oh-game-toolbar")),
+          cluster: rect(document.querySelector(".oh-workbench-cluster")),
+          modeTabs: rect(document.querySelector(".oh-game-mode-tabs")),
+          project: rect(document.querySelector(".oh-game-project")),
+          tabs: rect(document.querySelector(".oh-game-tabs")),
+          collapse: rect(collapse),
+          collapseHit: hit === null ? null : `${hit.tagName}.${typeof hit.className === "string" ? hit.className : ""}`.trim(),
+          collapseReachable: hit !== null && hit === collapse
+        };
+      }));
+    }
+  } finally {
+    await page.setViewportSize(original);
+    await settleResponsiveLayout(page);
+  }
+  return JSON.stringify(samples, null, 2);
+}
+
 async function assertEmptyCreationLayout(page: Page, region: Locator, mode: string): Promise<void> {
   const originalViewport = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
   try {
@@ -410,7 +463,10 @@ async function assertEmptyWorkspaceEntries(page: Page, sessionId: string): Promi
       await expect(composer).toHaveText(retainedDraft);
       await expect(composer).toBeFocused();
     }
-    await page.getByRole("button", { name: "\u6536\u8d77\u521b\u4f5c\u5de5\u4f5c\u53f0", exact: true }).click();
+    const collapse = page.getByRole("button", { name: "\u6536\u8d77\u521b\u4f5c\u5de5\u4f5c\u53f0", exact: true });
+    await collapse.click().catch(async (error: unknown) => {
+      throw new Error(`${error instanceof Error ? error.message : String(error)}\n\n${name} workbench toolbar geometry:\n${await describeWorkbenchToolbar(page)}`);
+    });
   }
   await expect(launcher).toBeVisible();
   await page.screenshot({ path: join(evidenceDirectory, "empty-workspace-workbenches.png"), fullPage: true });
