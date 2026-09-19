@@ -16,6 +16,7 @@ description: >
 将用户提供的参考文章转成可调用的写作系统，再按选题产出原创公众号文章。
 流程分为两个阶段：“全量阅读分析 → 提炼并保存风格模型”和“新选题 + 已保存风格模型 → 原创文章”。
 风格包含语言、画面与图文组织。图片承担正文的账号默认生成图片文章，OCR 只是分析图片文字的辅助工具。
+首次分析逐篇读完全部纳入文章及其正文图片，保存每篇的内容与图文关系；代表样本只用于深入验证，不能代替全量阅读。
 全量文章用于建库；日常创作不检索或读取原文，不依赖参考目录在线，也不重新分析全库。
 方法来源和与原提示词的对应关系见 [sources.md](references/sources.md)。
 集成的六个参考项目、资源和许可证见 [integrated-references.md](references/integrated-references.md)。
@@ -37,7 +38,8 @@ description: >
 
 | 当前任务 | 阅读与执行 |
 | --- | --- |
-| 首次建库、分析某作者、增量导入 | [build-library.md](references/build-library.md)，按全量阅读、分类、抽样深析的顺序执行；图片正文同时执行 [visual-style.md](references/visual-style.md) |
+| 首次建库、分析某作者 | [build-library.md](references/build-library.md)，按全量阅读、分类、抽样深析的顺序执行；图片正文同时执行 [visual-style.md](references/visual-style.md) |
+| 用户要求补充资料、更新风格 | 同一建库流程处理新增、变更资料及受影响规则；复用已完成分析，不默认重读全库 |
 | 新选题、批量选题、继续写作 | [write-article.md](references/write-article.md)，恢复进度后加载已保存模型、参数与创作规则；图片型账号加载图文模型并执行 [visual-style.md](references/visual-style.md) |
 | 封面、配图、换图、字卡 | [images-and-layout.md](references/images-and-layout.md) 的图片与字卡流程 |
 | 学习排版、图文排版、导出 | 同一参考的排版流程；排版不自动触发生图 |
