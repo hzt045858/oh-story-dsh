@@ -97,14 +97,19 @@ def planned_card(state, spec, output):
 
 def render_card(spec_path: Path, output: Path, font_path: Path | None = None):
     from article_workflow import current, exclusive, has_contract, safe
-    output = output.absolute()
+    # Resolve both sides before comparing. `relative_to` is a plain string comparison, and the
+    # two sides arrive in different forms: macOS `tempfile` hands out `/var/...` while the
+    # contract speaks `/private/var/...`, and Windows delivers 8.3 short names (`RUNNER~1`)
+    # while `safe()` resolves them to the long form. `safe()` resolves its own root anyway, so
+    # resolving here keeps every path below in one form.
+    output, spec_path = output.resolve(), spec_path.resolve()
     owner = next((p for p in output.parents if has_contract(p)), None)
     if owner is None:
         return _render_card(spec_path, output, font_path)
     with exclusive(owner):
         state = current(owner)
         output = safe(owner, output.relative_to(owner).as_posix())
-        spec_path = safe(owner, spec_path.absolute().relative_to(owner).as_posix(), True)
+        spec_path = safe(owner, spec_path.relative_to(owner).as_posix(), True)
         safe(owner, output.with_suffix(".receipt.json").relative_to(owner).as_posix())
         return _render_card(spec_path, output, font_path, state)
 
