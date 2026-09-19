@@ -53,6 +53,7 @@ def corpus_audit(account):
     build_index(account)
     index = obj(safe(account, INDEX, True))
     rows, bodies, issues = {}, {}, []
+    body_image_articles = 0
     excluded = []
     for row in index["articles"]:
         if row.get("read_status") == "missing":
@@ -69,6 +70,9 @@ def corpus_audit(account):
             _title, body, sha = read_article(safe(source, row["source_file"], True))
             if sha != row["source_sha256"]:
                 raise ValueError("source hash changed")
+            if row.get("has_image_references"):
+                joint = obj(safe(account, row["joint_analysis_file"], True))
+                body_image_articles += any(u.get("role") == "body" for u in joint["units"])
             bodies[row["id"]] = body
         except (ValueError, OSError, KeyError) as error:
             issues.append({"id": row["id"], "reason": str(error)})
@@ -76,6 +80,7 @@ def corpus_audit(account):
     categories = sorted({r["primary_category"] for r in ready.values() if r.get("primary_category")})
     coverage = {"included": len(rows), "ready": len(ready), "pending": len(issues),
                 "image_articles": sum(bool(r.get("has_image_references")) for r in rows.values()),
+                "body_image_articles": body_image_articles,
                 "joint_reviewed": sum(bool(r.get("joint_analysis_sha256")) for r in ready.values()),
                 "topics": categories, "excluded": excluded}
     return {"rows": rows, "ready": ready, "bodies": bodies, "issues": issues, "coverage": coverage}
@@ -168,7 +173,7 @@ def audit(account, model_entries):
         models.append({**entry, "sha256": digest(path.read_bytes())})
     if not any(m["kind"] == "global" for m in models):
         errors.append("global style model missing")
-    if corpus["coverage"]["image_articles"] and not any(m["kind"] == "visual" for m in models):
+    if corpus["coverage"]["body_image_articles"] and not any(m["kind"] == "visual" for m in models):
         errors.append("image corpus requires a joint visual style model")
     uncovered = sorted(set(corpus["coverage"]["topics"]) - topics)
     candidate = {"schema_version": 1, "workflow": "style-release-v1", "account_id": account_id,

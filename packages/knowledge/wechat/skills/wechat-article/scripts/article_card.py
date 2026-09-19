@@ -57,8 +57,7 @@ def fit(text, font_path, maximum, minimum, width, height):
     raise ValueError("card text does not fit; shorten it or split it into multiple cards")
 
 
-def render_card(spec_path: Path, output: Path, font_path: Path | None = None):
-    spec = load_json(spec_path)
+def spec_fields(spec):
     if not isinstance(spec, dict) or set(spec) - {"kind", "title", "points", "footer", "accent", "background", "text"}:
         raise ValueError("unsupported card specification")
     kind = spec.get("kind", "card")
@@ -69,6 +68,51 @@ def render_card(spec_path: Path, output: Path, font_path: Path | None = None):
         raise ValueError("provide a title and an optional text footer")
     if not isinstance(points, list) or len(points) > 4 or any(not isinstance(point, str) or not point.strip() for point in points):
         raise ValueError("points must contain at most four nonempty text items")
+    return kind, title, points, footer
+
+
+def planned_card(state, spec, output):
+    from article_workflow import card_text
+    kind, title, points, footer = spec_fields(spec)
+    name = output.relative_to(state["article"]).as_posix()
+    matches = [c for c in state["plan"]["cards"] if c["output"] == name]
+    if len(matches) != 1:
+        raise ValueError("program output must match one image in the locked plan")
+    card = matches[0]
+    if card["role"] != ("cover" if kind == "cover" else "body"):
+        raise ValueError("program card kind differs from the planned image role")
+    visible = [title, *points, *([footer] if footer else [])]
+    if visible != card_text(card) or card["requirements"]["text_rendering"] != "overlay":
+        raise ValueError("program card requires the planned exact copy and overlay text strategy")
+    width, height = (1200, 510) if kind == "cover" else (1080, 1440)
+    requirements = card["requirements"]
+    if "size" in requirements and requirements["size"] != [width, height]:
+        raise ValueError("program card dimensions differ from the locked plan")
+    if "aspect_ratio" in requirements:
+        rw, rh = requirements["aspect_ratio"]
+        if abs(width / height / (rw / rh) - 1) > 0.01:
+            raise ValueError("program card aspect ratio differs from the locked plan")
+    return card
+
+
+def render_card(spec_path: Path, output: Path, font_path: Path | None = None):
+    from article_workflow import current, exclusive, has_contract, safe
+    output = output.absolute()
+    owner = next((p for p in output.parents if has_contract(p)), None)
+    if owner is None:
+        return _render_card(spec_path, output, font_path)
+    with exclusive(owner):
+        state = current(owner)
+        output = safe(owner, output.relative_to(owner).as_posix())
+        spec_path = safe(owner, spec_path.absolute().relative_to(owner).as_posix(), True)
+        safe(owner, output.with_suffix(".receipt.json").relative_to(owner).as_posix())
+        return _render_card(spec_path, output, font_path, state)
+
+
+def _render_card(spec_path, output, font_path, state=None):
+    spec = load_json(spec_path)
+    kind, title, points, footer = spec_fields(spec)
+    card = planned_card(state, spec, output) if state is not None else None
     all_text = title + footer + "".join(points)
     if font_path is None:
         font_path = default_font(all_text)
@@ -81,6 +125,9 @@ def render_card(spec_path: Path, output: Path, font_path: Path | None = None):
             raise ValueError("card colors must be six-digit hex values")
     if output.suffix.lower() != ".png" or output.exists():
         raise ValueError("choose a new PNG output version")
+    receipt_path = output.with_suffix(".receipt.json")
+    if state is not None and receipt_path.exists():
+        raise ValueError("program receipt already exists; choose a new planned output version")
     width, height = (1200, 510) if kind == "cover" else (1080, 1440)
     margin = 64
     canvas = Image.new("RGB", (width, height), colors["background"])
@@ -115,7 +162,13 @@ def render_card(spec_path: Path, output: Path, font_path: Path | None = None):
     receipt = {"output": str(output.resolve()), "width": width, "height": height,
                "source_sha256": digest(spec_path.read_bytes()), "output_sha256": digest(output.read_bytes()),
                "font": str(font_path.resolve()), "status": "rendered"}
-    write_json(output.with_suffix(".receipt.json"), receipt)
+    if state is not None:
+        receipt.update(schema_version=1, provenance="program-card-v1", provider_dispatched=False,
+                       output=card["output"],
+                       source_file=spec_path.relative_to(state["article"]).as_posix(), status="review_pending",
+                       control={"workflow": state["record"]["workflow"], "account_id": state["account_id"],
+                                "card_id": card["id"], "input_signature": state["card_signatures"][card["id"]]})
+    write_json(receipt_path, receipt)
     return receipt
 
 

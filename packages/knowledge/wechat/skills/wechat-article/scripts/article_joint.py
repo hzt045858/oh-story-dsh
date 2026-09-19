@@ -125,8 +125,6 @@ def validate(analysis: dict, record: dict) -> list[str]:
             errors.append(f"body image {order}: text/visual reading path required")
         if unit.get("uncertainties") != []:
             errors.append(f"body image {order}: unresolved visual/text uncertainty")
-    if not body_orders:
-        errors.append("no analyzed body images; identity-only material cannot establish joint style")
     sequence = analysis.get("sequence")
     if not isinstance(sequence, dict):
         return errors + ["whole-article sequence analysis required"]
@@ -143,7 +141,7 @@ def validate(analysis: dict, record: dict) -> list[str]:
         for transition in transitions:
             required(transition, ("relation",), "transition")
     rules = analysis.get("transfer_rules")
-    if not isinstance(rules, list) or not rules or not all(isinstance(r, dict) for r in rules):
+    if not isinstance(rules, list) or (body_orders and not rules) or not all(isinstance(r, dict) for r in rules):
         errors.append("source-backed joint transfer rules required")
     else:
         ids = []

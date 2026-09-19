@@ -111,6 +111,63 @@ class StyleReleaseTests(unittest.TestCase):
         self.entries.append({"key": "visual", "kind": "visual", "file": self.entries[0]["file"]})
         self.assertTrue(style_release.audit(self.account, self.entries)["model_errors"])
 
+    def review_image_references(self, role="identity"):
+        from PIL import Image
+        from article_ingest import ingest, MANIFEST
+        from article_joint import BASE
+        from joint_selftest import joint_fixture
+        Image.new("RGB", (80, 90), "teal").save(self.source / "logo.png")
+        for path in self.source.glob("*.md"):
+            path.write_text(path.read_text(encoding="utf-8") + "\n![logo](logo.png)\n", encoding="utf-8")
+        ingest(self.account, self.source, visual_only=True)
+        annotations = load_json(self.account / ANNOTATIONS)
+        records = load_json(self.account / MANIFEST)["articles"]
+        for record in records:
+            analysis = joint_fixture(record)
+            if role != "body":
+                for unit in analysis["units"]:
+                    unit.update(role=role, excluded_reason="Reviewed logo, not article content")
+                analysis["sequence"].update(body_orders=[], transitions=[])
+                analysis["transfer_rules"] = []
+            name = f"{BASE}/{record['id']}.json"
+            write_json(self.account / name, analysis)
+            annotation = next(item for item in annotations if item["id"] == record["id"])
+            annotation.update(source_sha256=record["source_sha256"], analysis_input_sha256=record["analysis_input_sha256"],
+                              content_reviewed=True, visual_reviewed=True, joint_analysis_file=name,
+                              joint_analysis_sha256=digest((self.account / name).read_bytes()))
+            for entry in self.entries:
+                model = load_json(self.account / entry["file"])
+                evidence = next(item for item in model["rules"][0]["evidence"] if item["article_id"] == record["id"])
+                evidence["source_sha256"] = record["source_sha256"]
+                write_json(self.account / entry["file"], model)
+        write_json(self.account / ANNOTATIONS, annotations)
+        return records
+
+    def test_excluded_decorations_do_not_force_a_visual_model_for_text_articles(self):
+        records = self.review_image_references()
+        result = style_release.audit(self.account, self.entries)
+        self.assertEqual(result["model_errors"], [])
+        self.assertEqual(result["pending_articles"], [])
+        self.assertEqual(result["candidate"]["coverage"]["image_articles"], 2)
+        self.assertEqual(result["candidate"]["coverage"]["body_image_articles"], 0)
+        self.assertEqual(style_release.seal(self.account, self.entries, self.review())["status"], "ready")
+        visual = {"key": "visual", "kind": "visual", "file": "作者风格系统/04_作者稳定风格/visual.json"}
+        model = load_json(self.account / self.entries[0]["file"])
+        for evidence in model["rules"][0]["evidence"]:
+            record = next(r for r in records if r["id"] == evidence["article_id"])
+            evidence.update(order=1, image_sha256=record["images"][0]["image_sha256"],
+                            observation="TEST ONLY: observed logo")
+        write_json(self.account / visual["file"], model)
+        self.assertTrue(style_release.audit(self.account, [*self.entries, visual])["model_errors"])
+
+    def test_reviewed_body_images_still_require_a_joint_visual_model(self):
+        self.review_image_references(role="body")
+        result = style_release.audit(self.account, self.entries)
+        self.assertEqual(result["candidate"]["coverage"]["body_image_articles"], 2)
+        self.assertIn("image corpus requires a joint visual style model", result["model_errors"])
+        with self.assertRaises(ValueError):
+            style_release.seal(self.account, self.entries, self.review())
+
     def test_release_is_account_bound_and_model_hash_bound(self):
         style_release.seal(self.account, self.entries, self.review())
         with self.assertRaises(ValueError):

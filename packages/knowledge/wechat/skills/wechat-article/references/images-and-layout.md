@@ -104,6 +104,12 @@ python "{skill}/scripts/article_card.py" "文章目录/prompts/card-v1.json" --o
 ```
 
 字体、输入哈希和图片哈希写入回执，输出须用新版本文件名。生成后检查字形、行距和边界。
+受控文章先审稿并锁定图文计划：输出必须对应计划中的一张图，kind=cover 对应 cover，kind=card 对应 body，
+text_rendering 使用 overlay，尺寸或比例须与上述程序输出一致。title、points、footer 的非空文案按顺序
+对应计划 text 的 title、body、dialogue、labels；不匹配时会在写图前拒绝。配方 JSON 保存在文章目录内。
+程序自动写入同名 `.receipt.json`，绑定账号、卡片、计划签名和配方哈希，状态为 review_pending；
+不需要再次导入同一张图，也不代表 API 生图或审稿完成。逐图审稿通过后才能 assemble，成稿仍须独立审稿。
+配方或回执变化会使原成稿审稿失效。文章目录外独立使用时仍生成 rendered 回执。
 程序字卡是本项目实现，未复制 guizang 的 AGPL 封面模板。
 它是纯文字卡工具，不包含漫画场景；漫画型账号不能仅用此工具冒充图文风格完成。
 

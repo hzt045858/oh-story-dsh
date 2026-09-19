@@ -135,6 +135,148 @@ class ControlledTests(unittest.TestCase):
         shutil.rmtree(self.account / "参考文章")
         self.assertEqual(lock(self.account, self.article)["status"], "plan_locked")
 
+    def test_program_cover_receipt_is_bound_to_the_plan_and_still_needs_review(self):
+        from article_card import default_font, render_card
+        if default_font("Test article") is None:
+            self.skipTest("no local font available")
+        account, article = fixture(self.root, "program-cover", "text", 0)
+        plan = load_json(article / workflow.PLAN)
+        plan["cards"] = [{"id": "cover", "order": 1, "role": "cover", "text": {"title": "Test article"},
+                          "scene": "Article title", "layout": "Program typesetting", "text_image_relation": "Title identifies article",
+                          "style_rule_ids": ["g/G1"], "output": "images/cover-v1.png", "alt": "Article title",
+                          "requirements": {"size": [1200, 510], "text_rendering": "overlay"}, "references": []}]
+        write_json(article / workflow.PLAN, plan)
+        lock(account, article)
+        spec = article / "prompts/cover.json"
+        write_json(spec, {"kind": "cover", "title": "Test article"})
+        output = article / "images/cover-v1.png"
+        receipt = render_card(spec, output)
+        self.assertEqual(receipt["status"], "review_pending")
+        self.assertFalse(receipt["provider_dispatched"])
+        self.assertEqual(receipt["control"]["account_id"], "program-cover")
+        with self.assertRaises(ValueError):
+            workflow.assemble(article)
+        reviewed_images(article)
+        workflow.assemble(article)
+        target = workflow.review_target(article)
+        self.assertIn("prompts/cover.json", target["files"])
+        self.assertIn("images/cover-v1.receipt.json", target["files"])
+        write_json(article / workflow.FINAL_REVIEW, assessment(target["input_signature"], workflow.FINAL_CHECKS))
+        self.assertEqual(workflow.require_ready(article)["status"], "reviewed")
+        write_json(spec, {"kind": "cover", "title": "Different unplanned copy"})
+        with self.assertRaises(ValueError):
+            workflow.require_ready(article)
+
+    def test_program_card_rejects_unplanned_output_copy_and_size_before_writing(self):
+        from article_card import default_font, render_card
+        if default_font("Test article") is None:
+            self.skipTest("no local font available")
+        lock(self.account, self.article)
+        spec = self.article / "prompts/card.json"
+        write_json(spec, {"kind": "card", "title": "Test article"})
+        for name in ("images/unplanned.png", "images/c1-v1.png"):
+            output = self.article / name
+            with self.assertRaises(ValueError):
+                render_card(spec, output)
+            self.assertFalse(output.exists())
+
+    def program_body(self, alias="program-body", **requirements):
+        from article_card import default_font
+        if default_font("Point 1") is None:
+            self.skipTest("no local font available")
+        account, article = fixture(self.root, alias, count=1)
+        plan = load_json(article / workflow.PLAN)
+        card = plan["cards"][0]
+        card["requirements"] = {"size": [1080, 1440], "text_rendering": "overlay", **requirements}
+        card["parameters"] = {}
+        write_json(article / workflow.PLAN, plan)
+        lock(account, article)
+        spec = article / "prompts/body.json"
+        write_json(spec, {"kind": "card", "title": "Point 1", "points": ["Explanation 1", "Line 1"]})
+        return account, article, spec, article / card["output"]
+
+    def test_program_body_card_completes_only_with_current_provenance_and_reviews(self):
+        from article_card import render_card
+        _account, article, spec, output = self.program_body()
+        receipt = render_card(spec, output)
+        reviewed_images(article)
+        workflow.assemble(article)
+        target = workflow.review_target(article)
+        write_json(article / workflow.FINAL_REVIEW, assessment(target["input_signature"], workflow.FINAL_CHECKS))
+        self.assertEqual(workflow.require_ready(article)["status"], "reviewed")
+        receipt_path = output.with_suffix(".receipt.json")
+        for field, value in (("account_id", "other"), ("input_signature", "stale"), ("workflow", "other")):
+            changed = copy.deepcopy(receipt)
+            changed["control"][field] = value
+            write_json(receipt_path, changed)
+            with self.assertRaises(ValueError):
+                workflow.require_ready(article)
+        write_json(receipt_path, receipt)
+        write_json(spec, {"kind": "card", "title": "Point 1", "points": ["Explanation 1", "Line 1"], "accent": "#ff0000"})
+        with self.assertRaises(ValueError):
+            workflow.require_ready(article)
+
+    def test_program_renderer_rejects_invalid_plan_dimensions_and_external_recipe(self):
+        from article_card import render_card
+        _account, article, spec, output = self.program_body(size=[360, 480])
+        with self.assertRaisesRegex(ValueError, "dimensions"):
+            render_card(spec, output)
+        self.assertFalse(output.exists())
+        _account, article, spec, output = self.program_body("bad-ratio", aspect_ratio=[1, 1])
+        with self.assertRaisesRegex(ValueError, "aspect ratio"):
+            render_card(spec, output)
+        self.assertFalse(output.exists())
+        _account, article, spec, output = self.program_body("external-recipe")
+        outside = self.root / "external-recipe.json"
+        shutil.copyfile(spec, outside)
+        with self.assertRaises(ValueError):
+            render_card(outside, output)
+        self.assertFalse(output.exists())
+
+    def test_program_renderer_rejects_changed_copy_and_preserves_existing_receipts(self):
+        from article_card import render_card
+        _account, _article, spec, output = self.program_body()
+        original = load_json(spec)
+        write_json(spec, {**original, "title": "Unplanned message"})
+        with self.assertRaisesRegex(ValueError, "exact copy"):
+            render_card(spec, output)
+        self.assertFalse(output.exists())
+        write_json(spec, original)
+        receipt_path = output.with_suffix(".receipt.json")
+        write_json(receipt_path, {"prior_receipt": "preserve"})
+        original_receipt = receipt_path.read_bytes()
+        with self.assertRaises(ValueError):
+            render_card(spec, output)
+        self.assertFalse(output.exists())
+        self.assertEqual(receipt_path.read_bytes(), original_receipt)
+
+    def test_program_provenance_survives_relocating_the_same_account(self):
+        from article_card import render_card
+        account, article, spec, output = self.program_body()
+        render_card(spec, output)
+        reviewed_images(article)
+        workflow.assemble(article)
+        target = workflow.review_target(article)
+        write_json(article / workflow.FINAL_REVIEW, assessment(target["input_signature"], workflow.FINAL_CHECKS))
+        moved = self.root / "relocated-account"
+        account.rename(moved)
+        self.assertEqual(workflow.require_ready(moved / "创作/T001")["status"], "reviewed")
+
+    def test_standalone_program_card_keeps_its_existing_receipt_behavior(self):
+        from article_card import default_font, render_card
+        if default_font("Standalone title") is None:
+            self.skipTest("no local font available")
+        spec = self.root / "standalone-card.json"
+        output = self.root / "standalone-card.png"
+        write_json(spec, {"kind": "cover", "title": "Standalone title"})
+        receipt = render_card(spec, output)
+        self.assertEqual(receipt["status"], "rendered")
+        self.assertEqual((receipt["width"], receipt["height"]), (1200, 510))
+        self.assertEqual(receipt["output"], str(output.resolve()))
+        self.assertNotIn("control", receipt)
+        with self.assertRaises(ValueError):
+            render_card(spec, output)
+
     def test_model_ready_flag_without_release_is_insufficient(self):
         (self.account / style_release.RELEASE).unlink()
         with self.assertRaises(ValueError):
@@ -191,6 +333,52 @@ class ControlledTests(unittest.TestCase):
         self.assertEqual(revised["changed_cards"], ["c2"])
         self.assertEqual(previous["card_signatures"]["c1"], revised["card_signatures"]["c1"])
         self.assertEqual(first["job"], workflow.compile_job(self.article, "c1")["job"])
+
+    def test_focused_prompt_omits_source_examples_but_keeps_the_contract(self):
+        plan = load_json(self.article / "图文计划.json")
+        plan["cards"][0]["prompt_compiler_version"] = 2
+        write_json(self.article / "图文计划.json", plan)
+        lock(self.account, self.article)
+        state = workflow.current(self.article)
+        context = copy.deepcopy(state["contexts"]["c1"])
+        for rule in context["rules"].values():
+            rule["evidence"] = [{"summary": "UNRELATED EXAMPLE TITLE AND AUTHOR"}]
+        prompt = workflow.prompt_for(context)
+        self.assertNotIn("UNRELATED EXAMPLE TITLE AND AUTHOR", prompt)
+        self.assertIn("Point 1", prompt)
+        self.assertIn("ink", prompt)
+        self.assertNotIn("Point 2", prompt)
+        spec = json.loads(prompt.split("\n\n", 2)[2])
+        self.assertEqual(spec["exact_visible_text"], context["card"]["text"])
+        for field in ("scene", "layout", "requirements", "text_image_relation"):
+            self.assertEqual(spec[field], context["card"][field])
+        for field in ("facts", "constraints", "forbidden_terms"):
+            self.assertEqual(spec[field], context[field])
+        first = workflow.compile_job(self.article, "c1")
+        self.assertEqual(first["job"], workflow.compile_job(self.article, "c1")["job"])
+        workflow.verify_job(self.article, load_json(self.article / first["job"]))
+
+    def test_prompt_upgrade_only_invalidates_the_selected_card(self):
+        old = lock(self.account, self.article)
+        unchanged = workflow.compile_job(self.article, "c2")
+        changed = workflow.compile_job(self.article, "c1")
+        plan = load_json(self.article / "图文计划.json")
+        plan["cards"][0].update(prompt_compiler_version=2, output="images/c1-v2.png")
+        write_json(self.article / "图文计划.json", plan)
+        new = lock(self.account, self.article, revision=2)
+        self.assertEqual(new["changed_cards"], ["c1"])
+        self.assertEqual(old["card_signatures"]["c2"], new["card_signatures"]["c2"])
+        self.assertEqual(unchanged["job"], workflow.compile_job(self.article, "c2")["job"])
+        self.assertNotEqual(changed["job"], workflow.compile_job(self.article, "c1")["job"])
+
+    def test_unknown_prompt_compiler_is_rejected_before_dispatch(self):
+        for version in (True, 3, "2"):
+            with self.subTest(version=version):
+                plan = load_json(self.article / "图文计划.json")
+                plan["cards"][0]["prompt_compiler_version"] = version
+                write_json(self.article / "图文计划.json", plan)
+                with self.assertRaises(ValueError):
+                    workflow.inspect_inputs(self.account, self.article)
 
     def test_model_change_requires_explicit_new_release(self):
         lock(self.account, self.article)

@@ -120,6 +120,26 @@ class JointTests(unittest.TestCase):
         self.analysis["transfer_rules"][0]["evidence_orders"] = [2]
         self.assertEqual(joint.validate(self.analysis, self.record), [])
 
+    def test_reviewed_text_article_with_only_excluded_images_can_enter_the_index(self):
+        for unit, role in zip(self.analysis["units"], ("identity", "decoration")):
+            unit.update(role=role, excluded_reason="Reviewed non-content image; not transferable style evidence")
+        self.analysis["sequence"].update(body_orders=[], transitions=[])
+        self.analysis["transfer_rules"] = []
+        self.save()
+        self.assertTrue(joint.check(self.account, self.path.relative_to(self.account).as_posix())["ok"])
+        self.assertEqual(library.build_index(self.account)["counts"], {"ready": 1})
+        self.assertEqual(library.retrieve(self.account, category="test")["count"], 1)
+        self.analysis["units"][0].pop("excluded_reason")
+        self.save()
+        self.assertFalse(joint.check(self.account, self.path.relative_to(self.account).as_posix())["ok"])
+        self.assertEqual(library.build_index(self.account)["counts"], {"pending": 1})
+
+    def test_excluded_images_cannot_supply_joint_transfer_rules(self):
+        for unit in self.analysis["units"]:
+            unit.update(role="decoration", excluded_reason="Reviewed decoration only")
+        self.analysis["sequence"].update(body_orders=[], transitions=[])
+        self.assertTrue(joint.validate(self.analysis, self.record))
+
     def test_draft_unknown_image_hash_and_unresolved_are_blocked(self):
         for change in [lambda a: a.update(status="draft"), lambda a: a["units"][0].update(image_sha256="0" * 64),
                        lambda a: a.update(unresolved=["Image unreadable"])]:
