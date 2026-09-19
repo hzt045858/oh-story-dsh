@@ -310,65 +310,82 @@ async function settleResponsiveLayout(page: Page): Promise<void> {
 
 /**
  * Explains why the collapse button could not be clicked. Playwright stops at the
- * first covering element, so its message names a tab but not the layout that put
- * the tab there; the measurement does. The width sweep matters because the host
- * publishes `data-oh-story-layout` from a ResizeObserver and the game toolbar
- * only overlaps at some widths, which is why this reproduces on a runner and not
- * on a developer machine.
+ * first covering element, so its message names that element but not the layout that
+ * put it there; the measurement does. The width sweep matters because the host
+ * publishes `data-oh-story-layout` from a ResizeObserver and the toolbar only
+ * overlaps at some widths, which is why this reproduces on a runner and not on a
+ * developer machine.
+ *
+ * Three details are deliberate, and each one cost a previous CI round trip:
+ *
+ * * It measures the locator the click used rather than a class name. The game and
+ *   video studios stay mounted behind `hidden` and keep their own copy of the
+ *   button, so a `querySelector(".oh-workbench-collapse")` resolves to a
+ *   `display: none` node and reports a zero box at (0, 0) whatever workbench is
+ *   open — which is exactly what the first version of this diagnostic did.
+ * * `elementsFromPoint` rather than `elementFromPoint`, because the covering pane
+ *   is usually the second entry: the button's own ancestor subtree comes first.
+ * * Compact single-line samples, because this text has to survive a 3000-character
+ *   annotation budget that a pretty-printed dump fills on its own.
  */
-async function describeWorkbenchToolbar(page: Page): Promise<string> {
+async function describeWorkbenchState(page: Page, collapse: Locator): Promise<string> {
   const original = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-  const samples: unknown[] = [];
+  const samples: string[] = [];
+  const sample = async (): Promise<string> => {
+    const resolved = await collapse.count();
+    const visible = resolved > 0 && await collapse.first().isVisible().catch(() => false);
+    const box = visible ? await collapse.first().boundingBox().catch(() => null) : null;
+    const dom = await page.evaluate((point) => {
+      // No named helpers in here: tsx compiles with esbuild's keepNames, which
+      // rewrites `const rect = (node) => …` into `__name(rect, "rect")`, and
+      // `__name` does not exist in the page context. Inline arrows are fine.
+      const boxes: readonly (readonly [string, Element | null])[] = [
+        ["surface", document.querySelector(".oh-story-split-surface[data-open='true']")],
+        ["tree", document.querySelector(".oh-story-tree")],
+        ["game", document.querySelector(".oh-game-studio")],
+        ["video", document.querySelector(".oh-video-studio")],
+        ["seat", document.querySelector("[data-composer-seat]")]
+      ];
+      const measured = boxes.map(([label, node]) => {
+        if (node === null) return `${label} absent`;
+        const rect = node.getBoundingClientRect();
+        return `${label} ${String(Math.round(rect.x))},${String(Math.round(rect.y))} ${String(Math.round(rect.width))}x${String(Math.round(rect.height))}`;
+      });
+      const buttons = Array.from(document.querySelectorAll("button[aria-label='\u6536\u8d77\u521b\u4f5c\u5de5\u4f5c\u53f0']"), (button) => {
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return `${String(Math.round(rect.x))},${String(Math.round(rect.y))} ${String(Math.round(rect.width))}x${String(Math.round(rect.height))} ${style.display}/${style.visibility}/${style.pointerEvents}`;
+      });
+      const scroller = document.querySelector("[data-conversation-scroll]");
+      const stack = point === null ? [] : document.elementsFromPoint(point[0], point[1]).slice(0, 4)
+        .map((node) => `${node.tagName}.${typeof node.className === "string" ? node.className : ""}`.trim());
+      return [
+        `viewport ${String(innerWidth)}x${String(innerHeight)}`,
+        `workbench ${scroller?.getAttribute("data-oh-story-workbench") ?? "none"}`,
+        `layout ${scroller?.getAttribute("data-oh-story-layout") ?? "none"}`,
+        `pane ${scroller?.getAttribute("data-oh-studio-pane") ?? "none"}`,
+        ...measured,
+        `buttons ${buttons.length === 0 ? "none" : buttons.join(" | ")}`,
+        `stack ${stack.length === 0 ? "none" : stack.join(" < ")}`
+      ].join("; ");
+    }, box === null ? null : [box.x + box.width / 2, box.y + box.height / 2] as const);
+    return `[${String(resolved)} match${resolved === 1 ? "" : "es"}, visible=${String(visible)}] ${dom}`;
+  };
   try {
+    // The first sample is the state the click actually failed in, so it is taken
+    // before any viewport change.
+    samples.push(await sample());
     for (const width of [...new Set([original.width, 1024, 1280, 1440])]) {
-      if (width !== original.width) {
-        await page.setViewportSize({ width, height: original.height });
-        await settleResponsiveLayout(page);
-      }
-      samples.push(await page.evaluate(() => {
-        // No named helpers in here: tsx compiles with esbuild's keepNames, which
-        // rewrites `const rect = (node) => …` into `__name(rect, "rect")`, and
-        // `__name` does not exist in the page context. Inline arrows are fine.
-        const selectors = [
-          ".oh-game-toolbar", ".oh-workbench-cluster", ".oh-game-mode-tabs",
-          ".oh-game-project", ".oh-game-tabs", ".oh-workbench-collapse",
-          ".oh-game-mobile-switcher"
-        ];
-        const boxes = selectors.map((selector) => {
-          const node = document.querySelector(selector);
-          if (node === null) return null;
-          const box = node.getBoundingClientRect();
-          return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
-        });
-        const scroller = document.querySelector("[data-conversation-scroll]");
-        const studio = document.querySelector(".oh-game-studio");
-        const collapse = document.querySelector(".oh-workbench-collapse");
-        const collapseBox = collapse?.getBoundingClientRect();
-        const hit = collapseBox === undefined ? null : document.elementFromPoint(collapseBox.x + collapseBox.width / 2, collapseBox.y + collapseBox.height / 2);
-        return {
-          viewport: { width: innerWidth, height: innerHeight },
-          layout: scroller?.getAttribute("data-oh-story-layout") ?? null,
-          studioPane: scroller?.getAttribute("data-oh-studio-pane") ?? null,
-          scrollerClientWidth: scroller instanceof HTMLElement ? scroller.clientWidth : null,
-          studioClientWidth: studio instanceof HTMLElement ? studio.clientWidth : null,
-          studioNarrow: studio?.hasAttribute("data-oh-game-narrow") ?? null,
-          toolbar: boxes[0] ?? null,
-          cluster: boxes[1] ?? null,
-          modeTabs: boxes[2] ?? null,
-          project: boxes[3] ?? null,
-          tabs: boxes[4] ?? null,
-          collapse: boxes[5] ?? null,
-          switcher: boxes[6] ?? null,
-          collapseHit: hit === null ? null : `${hit.tagName}.${typeof hit.className === "string" ? hit.className : ""}`.trim(),
-          collapseReachable: hit !== null && hit === collapse
-        };
-      }));
+      if (width === original.width) continue;
+      await page.setViewportSize({ width, height: original.height });
+      await settleResponsiveLayout(page);
+      samples.push(await sample());
     }
   } finally {
     await page.setViewportSize(original);
     await settleResponsiveLayout(page);
   }
-  return JSON.stringify(samples, null, 2);
+  return samples.join("\n");
 }
 
 async function assertEmptyCreationLayout(page: Page, region: Locator, mode: string): Promise<void> {
@@ -496,7 +513,7 @@ async function assertEmptyWorkspaceEntries(page: Page, sessionId: string): Promi
     }
     const collapse = page.getByRole("button", { name: "\u6536\u8d77\u521b\u4f5c\u5de5\u4f5c\u53f0", exact: true });
     await collapse.click().catch(async (error: unknown) => {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}\n\n${name} workbench toolbar geometry:\n${await describeWorkbenchToolbar(page)}`);
+      throw new Error(`${error instanceof Error ? error.message : String(error)}\n\n${name} workbench collapse diagnostics:\n${await describeWorkbenchState(page, collapse)}`);
     });
   }
   await expect(launcher).toBeVisible();
@@ -765,6 +782,11 @@ async function main(): Promise<void> {
     process.stdout.write(`${JSON.stringify({ nativeWebview: true, automaticAuthentication: true, firstNewSession: true, directoryPickerCancellation: true, directoryPickerRetry: true, duplicatePickerGuard: true, freshSessionCreation: true, welcomeWorkbenches: 5, emptyWorkspaceWorkbenches: 5, emptyCreationPrefill: true, existingComposerDraftPreserved: true, composerSessionIsolation: true, responsiveEmptyWorkbenches: true, automaticPromptSubmissions: 0, workbenches: 5, wechatPreview: true, wechatSave: true, wechatReferenceReadOnly: true, wechatDraftRecovery: true, singleInstance: true, draftRestartRecovery: true, ownedRuntimeCleanup: true, nativeIpcDenied: true, externalModelCalls: 0 })}\n`);
   } catch (error) {
     await currentPage?.screenshot({ path: join(evidenceDirectory, "failure.png"), fullPage: true, timeout: 5_000 }).catch(() => undefined);
+    // The reporting step can only publish 3000 characters of the log's tail, and a
+    // Playwright click error plus a geometry dump exceeds that on its own — which is how
+    // the previous runs lost the sentence that said what actually went wrong. Handing the
+    // message over in its own file lets that step publish both ends of it.
+    await writeFile(join(evidenceDirectory, "failure-report.txt"), redact(error instanceof Error ? error.message : String(error)), "utf8").catch(() => undefined);
     throw error;
   } finally {
     process.removeListener("SIGINT", onSignal);

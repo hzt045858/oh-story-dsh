@@ -64,8 +64,16 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          message=$(tail -c 3000 /tmp/test-desktop-native.log | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')
-          echo "::error title=test:desktop:native::$message"
+          report=/tmp/test-desktop-native.log
+          # The smoke writes its own report on failure, and that report is the better source:
+          # the log's tail alone can be entirely geometry, which is how earlier runs published
+          # a diagnostic without the sentence that said what went wrong. Annotations are the
+          # only failure channel a fork gets without admin rights, so publish both ends —
+          # Playwright's message leads, the measured layout trails.
+          if [ -s test-results/desktop/failure-report.txt ]; then report=test-results/desktop/failure-report.txt; fi
+          encode() { sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}'; }
+          echo "::error title=test:desktop:native (head)::$(head -n 20 "$report" | encode)"
+          echo "::error title=test:desktop:native (tail)::$(tail -n 20 "$report" | encode)"
       - run: pnpm test:desktop:native --skip-build --models-only
       - run: pnpm desktop:portable
       # `package-desktop.ts` writes a folder, and a release asset has to be a file, so zip it here,
