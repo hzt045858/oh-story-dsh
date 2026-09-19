@@ -140,10 +140,14 @@ async function connectWebview(app: NativeApp, cdpPort: number, origin: string): 
     await page.waitForLoadState("domcontentloaded");
     return { browser, page };
   } catch (error) {
-    const startup = browser.contexts().flatMap((context) => context.pages())[0];
-    await startup?.screenshot({ path: join(evidenceDirectory, "startup-failure.png"), fullPage: true, timeout: 5_000 }).catch(() => undefined);
+    const pages = browser.contexts().flatMap((context) => context.pages());
+    const observed = pages.map((page) => page.url());
+    await pages[0]?.screenshot({ path: join(evidenceDirectory, "startup-failure.png"), fullPage: true, timeout: 5_000 }).catch(() => undefined);
     await browser.close();
-    throw error;
+    // The timeout says the shell never reached the service, but not whether the WebView was
+    // missing, blank, or sitting on the startup page — and those three need different fixes.
+    // Nothing else on a runner can see into the process, so report what the debugger saw.
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n\nWebView pages at failure: ${observed.length === 0 ? "none" : observed.join(", ")}`, { cause: error });
   }
 }
 
