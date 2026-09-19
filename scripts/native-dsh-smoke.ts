@@ -5,7 +5,7 @@ import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, type Locator, type Page } from "@playwright/test";
+import { chromium, type FrameLocator, type Locator, type Page } from "@playwright/test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dshVersion = "0.1.5-rc.1";
@@ -543,6 +543,36 @@ async function stop(child: ChildProcess): Promise<void> {
     new Promise<void>((accept) => setTimeout(accept, 3_000))
   ]);
   if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+}
+
+/**
+ * Click the generated game's own button and wait for it to answer.
+ *
+ * The preview iframe is keyed on `project.id:loadedVersion:revision`, so a project switch or an
+ * accepted rebuild legitimately replaces it. A single click can therefore land on the outgoing
+ * frame and do nothing. Retry instead of failing on one lost click, and when it never takes,
+ * report what the preview actually shows — a bare `locator.waitFor` timeout says nothing about
+ * whether the game was missing, blank, or simply never received the event.
+ */
+async function clickGeneratedGame(frame: FrameLocator, page: Page, projectSelect: Locator): Promise<void> {
+  const play = frame.getByRole("button", { name: "试玩成功", exact: true });
+  const verified = frame.getByRole("button", { name: "输入已验证", exact: true });
+  for (let attempt = 0; ; attempt += 1) {
+    // Click whenever the game still shows its initial label, so a lost click is retried instead
+    // of silently skipped; then accept the answered label as the only proof it worked.
+    if (await play.isVisible().catch(() => false)) await play.click({ timeout: 5_000 }).catch(() => undefined);
+    if (await verified.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false)) return;
+    if (attempt >= 3) {
+      const diagnostics = {
+        buttons: await frame.locator("button").allTextContents().catch(() => []),
+        runtimeState: await page.locator(".oh-game-runtime-state").innerText().catch(() => ""),
+        previewState: await page.locator(".oh-game-preview-shell").getAttribute("data-state").catch(() => null),
+        iframeCount: await page.locator('iframe[title$="可试玩预览"]').count().catch(() => -1),
+        project: await projectSelect.inputValue().catch(() => "")
+      };
+      throw new Error(`Generated game never accepted the click: ${JSON.stringify(diagnostics)}`);
+    }
+  }
 }
 
 async function main(): Promise<void> {
@@ -1513,8 +1543,7 @@ async function main(): Promise<void> {
         };
         throw new Error(`Generated workspace game was not playable: ${JSON.stringify(diagnostics)}`, { cause: error });
       }
-      await generatedPlay.click();
-      await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await clickGeneratedGame(generatedFrame, page, projectSelect);
       const generatedIframe = page.locator('iframe[title="《DSH Game Studio Smoke》可试玩预览"]');
       await generatedIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "generated-preserved"); });
       await gameTabs.getByRole("tab", { name: "项目文件", exact: true }).click();
@@ -1631,8 +1660,7 @@ async function main(): Promise<void> {
       if (!useRealDeepSeek) {
         await projectSelect.selectOption(`workspace:${generatedGameId}`);
         await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-        await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).click();
-        await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await clickGeneratedGame(generatedFrame, page, projectSelect);
         await generatedIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "new-build-preserved"); });
         const beforeGameUpdate = (await sessionEvents(origin, gameSession.sessionId)).at(-1)?.seq ?? -1;
         await rpc(origin, "session/prompt", {
