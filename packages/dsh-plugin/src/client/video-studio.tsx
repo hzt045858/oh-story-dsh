@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { workbenchLabel, type WorkbenchMode } from "./file-activity.js";
 import { endpoint, handleTabKey } from "./workbench-ui.js";
 
@@ -266,9 +266,27 @@ export function VideoStudio({
 }) {
   const project = projects.find((item) => item.id === projectId) ?? projects[0];
   const tabsId = useId();
+  const studioRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const studio = studioRef.current;
+    if (studio === null) return;
+    const publishWidth = () => {
+      // The same five-tab cluster the game toolbar carries, so the same threshold applies:
+      // below 620px the two-column toolbar cannot hold the cluster plus the second column,
+      // the grid collapses the cluster to its `min-width: 0` while its buttons keep
+      // overflowing, and the overflowing collapse button lands under the video tabs.
+      // This has to follow the studio's own width rather than `data-oh-story-layout`:
+      // `medium` splits the scroller into a narrower studio than `wide` does.
+      studio.toggleAttribute("data-oh-video-narrow", studio.clientWidth <= 620);
+    };
+    publishWidth();
+    const observer = new ResizeObserver(publishWidth);
+    observer.observe(studio);
+    return () => { observer.disconnect(); };
+  }, []);
   useEffect(() => { if (project !== undefined && project.id !== projectId) onProject(project.id); }, [onProject, project, projectId]);
   const tabs = ["preview", "artifacts"] as const;
-  return <main id={paneId} className="oh-video-studio" role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
+  return <main ref={studioRef} id={paneId} className="oh-video-studio" role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
     <header className="oh-video-toolbar">
       <div className="oh-workbench-cluster">
         <div className="oh-video-mode-tabs" role="tablist" aria-label="创作工作台">{workbenches.map((mode) => <button
