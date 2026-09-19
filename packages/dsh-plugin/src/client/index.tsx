@@ -68,7 +68,7 @@ import {
   type WorkbenchPreference
 } from "./workbench-presence.js";
 import { endpoint, handleTabKey } from "./workbench-ui.js";
-import { enterWorkbench, type WorkbenchEntryHost, type WorkbenchEntryRequest } from "./workbench-entry.js";
+import { enterWorkbench, preparedCreationDraft, type WorkbenchEntryHost, type WorkbenchEntryRequest } from "./workbench-entry.js";
 import styles from "./plugin.css?inline";
 
 export const name = "oh-story";
@@ -719,6 +719,7 @@ function CreativeWorkbench({
   const activityPath = primaryActivity?.path;
   const workbench = useStore((memory) => memory.workbench);
   const setWorkbench = actions.setWorkbench;
+  const preparedDraft = preparedCreationDraft(workbench, composerDraft);
   const gameTab = useStore((memory) => memory.gameTab);
   const setGameTab = actions.setGameTab;
   const gameProjectId = useStore((memory) => memory.gameProjectId);
@@ -1401,8 +1402,8 @@ function CreativeWorkbench({
   const selectedBasename = selected?.split("/").at(-1) ?? selectedLabel;
   const prepareCreation = (): void => {
     if (inputPhase === "adjudicating" || inputPhase === "submitting") return;
-    // Existing text and reference chips belong to the user; only seed an empty composer.
-    if (composerDraft.trim().length === 0) inputActions.setDraft(workbench === "wechat" ? "/wechat-article " : workbench === "story" ? "/story-setup " : "/short-drama ");
+    // Preserve authored text and reference chips; WeChat can replace a foreign bare entry command.
+    if (preparedDraft !== undefined) inputActions.setDraft(preparedDraft);
     const scroller = surfaceRef.current?.closest("[data-conversation-scroll]");
     scroller?.querySelector<HTMLElement>("[data-composer-seat] [data-composer-input]")?.focus();
   };
@@ -1613,7 +1614,7 @@ function CreativeWorkbench({
               <p>{groups.length === 0 ? `还没有${workbenchLabel(workbench)}文件` : "尚未选择文件"}</p>
               <div className="oh-story-start-actions">
                 {groups[0]?.[1][0] !== undefined && <button type="button" onClick={() => { const file = groups[0]?.[1][0]; if (file !== undefined) revealPath(file.path); }}>打开文件</button>}
-                <button className="oh-story-start-primary" type="button" disabled={inputPhase === "adjudicating" || inputPhase === "submitting"} onClick={prepareCreation}>{composerDraft.trim().length > 0 ? "继续编辑" : "开始创作"}</button>
+                <button className="oh-story-start-primary" type="button" disabled={inputPhase === "adjudicating" || inputPhase === "submitting"} onClick={prepareCreation}>{preparedDraft === undefined ? "继续编辑" : "开始创作"}</button>
               </div>
             </section>
         : selectedMedia && selectedFile !== undefined

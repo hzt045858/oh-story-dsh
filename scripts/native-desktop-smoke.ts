@@ -450,6 +450,27 @@ async function assertEmptyWorkspaceEntries(page: Page, sessionId: string): Promi
     if (index < 2 || modes[index] === "wechat") {
       const region = surface.getByRole("region", { name: `${name}\u521b\u4f5c\u8d77\u70b9`, exact: true });
       await expect(region).toBeVisible();
+      if (modes[index] === "wechat") {
+        const activeSurface = page.locator(".oh-story-split-surface[data-open='true']");
+        const modeTabs = activeSurface.getByRole("tablist", { name: workspaceTabsLabel });
+        await modeTabs.getByRole("tab", { name: tabNames[0]!, exact: true }).click();
+        await composer.click();
+        await composer.press("ControlOrMeta+A");
+        await composer.press("Backspace");
+        await expect(composer).toHaveText("");
+        await activeSurface.getByRole("region", { name: `${tabNames[0]!}\u521b\u4f5c\u8d77\u70b9`, exact: true })
+          .getByRole("button", { name: "\u5f00\u59cb\u521b\u4f5c", exact: true }).click();
+        await expect.poll(() => composer.textContent()).toBe("/story-setup ");
+        await modeTabs.getByRole("tab", { name, exact: true }).click();
+        await expect(region).toBeVisible();
+        await region.getByRole("button", { name: "\u5f00\u59cb\u521b\u4f5c", exact: true }).click();
+        await expect.poll(() => composer.textContent()).toBe("/wechat-article ");
+        await page.screenshot({ path: join(evidenceDirectory, "wechat-creation-command.png"), fullPage: true, animations: "disabled" });
+        const authoredCommand = "/story-setup Keep my existing story request";
+        await composer.fill(authoredCommand);
+        await region.getByRole("button", { name: "\u7ee7\u7eed\u7f16\u8f91", exact: true }).click();
+        await expect(composer).toHaveText(authoredCommand);
+      }
       await composer.click();
       await composer.press("ControlOrMeta+A");
       await composer.press("Backspace");
@@ -733,6 +754,7 @@ async function main(): Promise<void> {
     await assertNativeIpcDenied(currentPage);
     await currentPage.screenshot({ path: join(evidenceDirectory, "draft-after-restart.png"), fullPage: true });
     await currentPage.getByRole("tab", { name: tabNames[4]!, exact: true }).click();
+    await currentPage.getByRole("tab", { name: "\u6e90\u7801", exact: true }).click();
     await expect(currentPage.locator(".oh-story-editor textarea")).toHaveValue(wechatArticle.draft);
     expect(await readFile(join(workspaceDirectory, wechatArticle.path), "utf8")).toBe(wechatArticle.saved);
     await currentPage.screenshot({ path: join(evidenceDirectory, "wechat-draft-after-restart.png"), fullPage: true, animations: "disabled" });

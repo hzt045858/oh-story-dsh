@@ -12,6 +12,13 @@ export interface WorkbenchEntryHost {
   openSession: (sessionId: string) => void;
 }
 
+/** WeChat may replace another workbench's bare entry command, never its authored arguments. */
+export function preparedCreationDraft(mode: WorkbenchMode, draft: string): string | undefined {
+  const bare = draft.trim();
+  if (bare !== "" && !(mode === "wechat" && ["/story-setup", "/short-drama"].includes(bare))) return undefined;
+  return mode === "wechat" ? "/wechat-article " : mode === "story" ? "/story-setup " : "/short-drama ";
+}
+
 /** Publish the chosen mode before navigation, including when DSH reuses a blank session. */
 export async function enterWorkbench(
   host: WorkbenchEntryHost,
