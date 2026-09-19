@@ -24,7 +24,7 @@ const DRAMA_DIRECTORIES = ["输入", "项目开发", "设定集", "剧集", "交
 const GAME_DIRECTORY = "game-adaptations";
 // Preview studios need only a small manifest-driven subset, so discover them before a very large
 // prose workspace can consume the shared listing budget.
-const CREATIVE_DIRECTORIES = [VIDEO_DIRECTORY, GAME_DIRECTORY, "公众号", ...STORY_DIRECTORIES, ...DRAMA_DIRECTORIES] as const;
+const CREATIVE_DIRECTORIES = [VIDEO_DIRECTORY, GAME_DIRECTORY, ...STORY_DIRECTORIES, ...DRAMA_DIRECTORIES, "公众号"] as const;
 const ROOT_FILES = new Set(["short-drama.json"]);
 const EDITABLE_EXTENSIONS = new Set([".md", ".txt", ".json", ".jsonl"]);
 const GAME_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".html", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
@@ -373,12 +373,12 @@ async function readVersionedFile(fs: FileSystem, target: FsTarget, maxBytes: num
 
 async function listFiles(realm: WorkspaceRealm): Promise<WorkspaceFile[]> {
   const files: WorkspaceFile[] = [];
-  const walk = async (path: string, directory: FsTarget): Promise<void> => {
+  const walk = async (path: string, directory: FsTarget, limit: number): Promise<void> => {
     for (const entry of await realm.fs.listDir(directory)) {
       if (entry.name.startsWith(".") || !realm.fs.contains(realm.root, entry.target)) continue;
       const childPath = `${path}/${entry.name}`;
       if (entry.type === "directory") {
-        if (!skipVideoDirectory(childPath)) await walk(childPath, entry.target);
+        if (!skipVideoDirectory(childPath)) await walk(childPath, entry.target, limit);
       }
       else if (entry.type === "file" && (editablePath(childPath) || MEDIA_TYPES.has(extname(entry.name).toLocaleLowerCase()))) {
         const info = entry.version === undefined || entry.size === undefined ? await realm.fs.stat(entry.target) : undefined;
@@ -388,15 +388,17 @@ async function listFiles(realm: WorkspaceRealm): Promise<WorkspaceFile[]> {
           files.push({ path: childPath, bytes: entry.size ?? info?.size ?? 0, version, kind: mimeType === undefined ? "text" : "media", mimeType });
         }
       }
-      if (files.length >= FILE_LIMIT) return;
+      if (files.length >= limit) return;
     }
   };
   for (const directory of CREATIVE_DIRECTORIES) {
+    // WeChat has its own budget; its reference corpus must not hide existing workbench files.
+    const limit = directory === "公众号" ? files.length + FILE_LIMIT : FILE_LIMIT;
+    if (files.length >= limit) continue;
     const target = await realm.fs.resolve(directory, { cwd: realm.cwd });
     if (!realm.fs.contains(realm.root, target)) continue;
     const info = await realm.fs.stat(target);
-    if (info?.type === "directory") await walk(directory, target);
-    if (files.length >= FILE_LIMIT) break;
+    if (info?.type === "directory") await walk(directory, target, limit);
   }
   for (const path of ROOT_FILES) {
     const target = await creativeTarget(realm, path);
